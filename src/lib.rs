@@ -1,0 +1,13 @@
+pub mod app;
+pub mod badges;
+pub mod cli;
+pub mod core;
+pub mod manifest;
+pub mod providers;
+pub mod readme;
+pub mod readme_badges;
+pub mod readme_remove;
+pub mod tui;
+pub mod config;
+pub mod version;
+pub mod workflows;
