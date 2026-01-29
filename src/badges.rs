@@ -72,11 +72,11 @@ pub fn badge_for_workflow(owner: &str, repo: &str, workflow: &str) -> Badge {
         kind: BadgeKind::Ci,
         label: "CI".to_string(),
         image_url: format!(
-            "https://github.com/{}/{}/actions/workflows/{}.yml/badge.svg",
+            "https://github.com/{}/{}/actions/workflows/{}.yaml/badge.svg",
             owner, repo, workflow
         ),
         link_url: Some(format!(
-            "https://github.com/{}/{}/actions/workflows/{}.yml",
+            "https://github.com/{}/{}/actions/workflows/{}.yaml",
             owner, repo, workflow
         )),
     }

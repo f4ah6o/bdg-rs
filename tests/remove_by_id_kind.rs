@@ -17,7 +17,7 @@ fn wrap_block(lines: &[&str]) -> String {
 #[test]
 fn remove_by_id_single() {
     let lines = vec![
-        "[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)",
+        "[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yaml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yaml)",
         "![crate](https://img.shields.io/crates/v/foo.svg)",
     ];
     let content = wrap_block(&lines);
@@ -66,7 +66,7 @@ fn unknown_can_be_removed_by_id() {
 fn strict_mode_errors_when_id_missing() {
     let lines = vec!["![crate](https://img.shields.io/crates/v/foo.svg)"];
     let content = wrap_block(&lines);
-    let result = remove_block_lines_by_id_kind(&content, &["ci:ci.yml".to_string()], &[], true);
+    let result = remove_block_lines_by_id_kind(&content, &["ci:ci.yaml".to_string()], &[], true);
     assert!(result.is_err());
 }
 
@@ -75,8 +75,8 @@ fn missing_ids_are_reported() {
     let lines = vec!["![crate](https://img.shields.io/crates/v/foo.svg)"];
     let content = wrap_block(&lines);
     let outcome =
-        remove_block_lines_by_id_kind(&content, &["ci:ci.yml".to_string()], &[], false).unwrap();
-    assert_eq!(outcome.missing_ids, vec!["ci:ci.yml".to_string()]);
+        remove_block_lines_by_id_kind(&content, &["ci:ci.yaml".to_string()], &[], false).unwrap();
+    assert_eq!(outcome.missing_ids, vec!["ci:ci.yaml".to_string()]);
 }
 
 #[test]

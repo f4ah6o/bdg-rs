@@ -2,18 +2,18 @@ use bdg::readme_badges::parse_badge_line;
 
 #[test]
 fn parses_linked_image() {
-    let line = "[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)";
+    let line = "[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yaml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yaml)";
     let badge = parse_badge_line(line);
     assert_eq!(badge.kind, "github_actions");
-    assert_eq!(badge.id, "ci:ci.yml");
+    assert_eq!(badge.id, "ci:ci.yaml");
     assert_eq!(badge.label, "CI");
     assert_eq!(
         badge.image,
-        "https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg"
+        "https://github.com/OWNER/REPO/actions/workflows/ci.yaml/badge.svg"
     );
     assert_eq!(
         badge.link.as_deref(),
-        Some("https://github.com/OWNER/REPO/actions/workflows/ci.yml")
+        Some("https://github.com/OWNER/REPO/actions/workflows/ci.yaml")
     );
 }
 

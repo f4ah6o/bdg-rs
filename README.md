@@ -1,6 +1,7 @@
 # bdg
 <!-- bdg:begin -->
 [![crates.io](https://img.shields.io/crates/v/bdg.svg)](https://crates.io/crates/bdg)
+[![license](https://img.shields.io/github/license/f4ah6o/bdg-rs.svg)](https://github.com/f4ah6o/bdg-rs)
 <!-- bdg:end -->
 
 Interactive badge manager CLI for README files. It detects project metadata, suggests badges, and keeps edits confined to a managed marker block.
@@ -28,7 +29,7 @@ bdg list
 bdg list --json
 
 bdg remove
-bdg remove --id ci:ci.yml --id npm:@scope/pkg
+bdg remove --id ci:ci.yaml --id npm:@scope/pkg
 bdg remove --kind github_actions
 bdg remove --all
 bdg remove --dry-run
@@ -66,6 +67,7 @@ Use `--allow-yy-calver` to opt in to YY.MM/YY.MM.MICRO calver patterns.
 - 0: no change or success
 - 2: changes detected in dry-run
 - 1: error
+
 
 
 

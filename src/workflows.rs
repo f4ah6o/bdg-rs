@@ -22,7 +22,7 @@ pub fn detect_workflows(root: &Path) -> Vec<WorkflowInfo> {
         }
         let path = entry.path();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        if ext != "yml" && ext != "yaml" {
+        if ext != "yaml" && ext != "yaml" {
             continue;
         }
         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
