@@ -4,6 +4,7 @@ version = "2026.1.0"
 edition = "2024"
 description = "Interactive badge manager CLI for README files"
 license = "Apache-2.0"
+repository = "https://github.com/f4ah6o/bdg-rs"
 
 [dependencies]
 anyhow = "1.0"
