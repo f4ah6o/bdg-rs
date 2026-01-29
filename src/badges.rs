@@ -44,6 +44,14 @@ pub fn badge_for_crates(crate_name: &str) -> Badge {
 }
 
 pub fn badge_for_moonbit(module: &str) -> Badge {
+    let link_url = if module.contains('/') {
+        // Format: username/package -> https://mooncakes.io/docs/username/package
+        Some(format!("https://mooncakes.io/docs/{}", module))
+    } else {
+        // Fallback to mooncakes.io homepage for unpublished modules
+        Some("https://mooncakes.io/".to_string())
+    };
+
     Badge {
         kind: BadgeKind::Version,
         label: "moonbit".to_string(),
@@ -51,7 +59,7 @@ pub fn badge_for_moonbit(module: &str) -> Badge {
             "https://img.shields.io/badge/moonbit-{}-informational",
             module
         ),
-        link_url: None,
+        link_url,
     }
 }
 
