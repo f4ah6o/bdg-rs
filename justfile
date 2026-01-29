@@ -6,6 +6,6 @@ release-check:
     cargo publish --dry-run
 
 release: release-check
-    version=$(node -p "require('./package.json').version"); \
+    version=$(grep '^version = ' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
     git tag "v${version}"; \
     git push origin "v${version}"
