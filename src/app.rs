@@ -1,25 +1,27 @@
 use crate::badges::{
-    badge_for_crates, badge_for_license, badge_for_moonbit, badge_for_npm, badge_for_workflow,
-    Badge,
+    Badge, badge_for_crates, badge_for_license, badge_for_moonbit, badge_for_npm,
+    badge_for_workflow,
 };
-use crate::config::{load_config, Config};
-use crate::core::{build_context, Ecosystem, ProjectContext};
-use crate::manifest::{read_cargo_toml, read_moon_mod, read_package_json, RepositoryField};
-use crate::providers::{fetch_crates_metadata, fetch_npm_metadata, RegistryMetadata};
+use crate::config::{Config, load_config};
+use crate::core::{Ecosystem, ProjectContext, build_context};
+use crate::manifest::{RepositoryField, read_cargo_toml, read_moon_mod, read_package_json};
+use crate::providers::{RegistryMetadata, fetch_crates_metadata, fetch_npm_metadata};
 use crate::readme::{
-    ensure_marker_block, extract_managed_block, readme_newline_info, remove_marker_block,
-    resolve_readme, rewrite_marker_block, rewrite_marker_block_lines, write_readme_atomic,
-    BDG_BEGIN, BDG_END,
+    BDG_BEGIN, BDG_END, ensure_marker_block, extract_managed_block, readme_newline_info,
+    remove_marker_block, resolve_readme, rewrite_marker_block, rewrite_marker_block_lines,
+    write_readme_atomic,
 };
 use crate::readme_badges::ParsedBadge;
 use crate::readme_remove::remove_block_lines_by_id_kind;
 use crate::version::VersionOptions;
-use crate::workflows::{detect_workflows, gh_latest_status_json, WorkflowInfo};
+use crate::workflows::{WorkflowInfo, detect_workflows, gh_latest_status_json};
 use anyhow::Context;
 use dialoguer::MultiSelect;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+
+const BDG_SKILL: &str = include_str!("../.agents/skills/bdg/SKILL.md");
 
 #[derive(Debug, Clone, Default)]
 pub struct ResolvedMetadata {
@@ -278,6 +280,11 @@ pub fn cmd_remove(
     }
     write_readme_atomic(&readme_path, &updated)?;
     Ok(0)
+}
+
+pub fn cmd_skills() -> anyhow::Result<()> {
+    print!("{}", BDG_SKILL);
+    Ok(())
 }
 
 fn prompt_badges(badges: &[Badge]) -> anyhow::Result<Vec<Badge>> {

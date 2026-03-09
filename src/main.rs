@@ -44,6 +44,9 @@ fn main() -> anyhow::Result<std::process::ExitCode> {
             )?;
             return Ok(std::process::ExitCode::from(code as u8));
         }
+        bdg::cli::Commands::Skills => {
+            bdg::app::cmd_skills()?;
+        }
     }
     Ok(std::process::ExitCode::SUCCESS)
 }

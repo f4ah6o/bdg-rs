@@ -33,6 +33,8 @@ bdg remove --id ci:ci.yaml --id npm:@scope/pkg
 bdg remove --kind github_actions
 bdg remove --all
 bdg remove --dry-run
+
+bdg skills
 ```
 
 ## Managed Block
@@ -59,6 +61,9 @@ year_min = 2000
 year_max = 2199
 ```
 
+## Agent Skills
+`bdg skills` prints the bundled Agent Skills `SKILL.md` for `bdg` so other agents and tools can load the current CLI usage context directly.
+
 ## Version Classification
 Versions are classified as calver, semver, or unknown with calver priority.
 Use `--allow-yy-calver` to opt in to YY.MM/YY.MM.MICRO calver patterns.
@@ -67,7 +72,6 @@ Use `--allow-yy-calver` to opt in to YY.MM/YY.MM.MICRO calver patterns.
 - 0: no change or success
 - 2: changes detected in dry-run
 - 1: error
-
 
 
 

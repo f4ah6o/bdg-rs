@@ -47,4 +47,5 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         allow_yy_calver: bool,
     },
+    Skills,
 }
