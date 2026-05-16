@@ -4,7 +4,9 @@ use crate::badges::{
 };
 use crate::config::{Config, load_config};
 use crate::core::{Ecosystem, ProjectContext, build_context};
-use crate::manifest::{RepositoryField, read_cargo_toml, read_moon_mod, read_package_json};
+use crate::manifest::{
+    RepositoryField, read_moon_mod, read_package_json, read_resolved_cargo_package,
+};
 use crate::providers::{RegistryMetadata, fetch_crates_metadata, fetch_npm_metadata};
 use crate::readme::{
     BDG_BEGIN, BDG_END, ensure_marker_block, extract_managed_block, readme_newline_info,
@@ -58,11 +60,9 @@ pub fn cmd_add(
         }
     }
     if let Some(path) = &context.manifests.cargo_toml {
-        if let Ok(manifest) = read_cargo_toml(path) {
-            if let Some(package) = manifest.package {
-                if let Some(name) = package.name.as_deref() {
-                    candidates.push(badge_for_crates(name));
-                }
+        if let Ok(package) = read_resolved_cargo_package(path) {
+            if let Some(name) = package.and_then(|package| package.name) {
+                candidates.push(badge_for_crates(&name));
             }
         }
     }
@@ -76,7 +76,7 @@ pub fn cmd_add(
     if let (Some(owner), Some(repo)) = (owner.as_deref(), repo.as_deref()) {
         candidates.push(badge_for_license(owner, repo));
         for workflow in workflows {
-            candidates.push(badge_for_workflow(owner, repo, &workflow.name));
+            candidates.push(badge_for_workflow(owner, repo, &workflow.file));
         }
     }
 
@@ -512,14 +512,7 @@ fn resolve_rust_metadata(context: &ProjectContext) -> anyhow::Result<ResolvedMet
         .cargo_toml
         .as_ref()
         .context("Cargo.toml missing")?;
-    let manifest = read_cargo_toml(manifest_path)?;
-    let package = manifest.package.unwrap_or(crate::manifest::CargoPackage {
-        name: None,
-        version: None,
-        description: None,
-        license: None,
-        repository: None,
-    });
+    let package = read_resolved_cargo_package(manifest_path)?.unwrap_or_default();
     let registry = package
         .name
         .as_deref()
@@ -830,8 +823,7 @@ fn collect_manifests(
         );
     }
     if let Some(path) = &context.manifests.cargo_toml {
-        let manifest = read_cargo_toml(path)?;
-        if let Some(package) = manifest.package {
+        if let Some(package) = read_resolved_cargo_package(path)? {
             let version_info = package
                 .version
                 .as_deref()
@@ -919,8 +911,7 @@ fn collect_registries(
         }
     }
     if let Some(path) = &context.manifests.cargo_toml {
-        let manifest = read_cargo_toml(path)?;
-        if let Some(package) = manifest.package {
+        if let Some(package) = read_resolved_cargo_package(path)? {
             if let Some(name) = package.name.as_deref() {
                 match fetch_crates_metadata(name) {
                     Ok(meta) => {

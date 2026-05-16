@@ -189,11 +189,15 @@ fn split_lines<'a>(content: &'a str, newline: &str) -> Vec<&'a str> {
     if content.is_empty() {
         return Vec::new();
     }
-    if newline == "\r\n" {
-        content.split("\r\n").collect()
+    let mut lines = if newline == "\r\n" {
+        content.split("\r\n").collect::<Vec<_>>()
     } else {
-        content.split('\n').collect()
+        content.split('\n').collect::<Vec<_>>()
+    };
+    if content.ends_with(newline) {
+        lines.pop();
     }
+    lines
 }
 
 fn join_lines(lines: Vec<String>, newline: &str, trailing_newline: bool) -> String {

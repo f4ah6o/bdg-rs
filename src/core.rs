@@ -1,3 +1,4 @@
+use crate::manifest::cargo_manifest_has_package;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,7 +90,7 @@ pub fn detect_manifests(
 
     manifests.package_json = choose_closest(current_dir, &manifests.package_json_all);
     manifests.moon_mod = choose_closest(current_dir, &manifests.moon_mod_all);
-    manifests.cargo_toml = choose_closest(current_dir, &manifests.cargo_toml_all);
+    manifests.cargo_toml = choose_cargo_manifest(current_dir, &manifests.cargo_toml_all);
 
     Ok(manifests)
 }
@@ -252,6 +253,19 @@ fn choose_closest(current_dir: &Path, paths: &[PathBuf]) -> Option<PathBuf> {
         }
     }
     best.map(|(_, _, path)| path)
+}
+
+fn choose_cargo_manifest(current_dir: &Path, paths: &[PathBuf]) -> Option<PathBuf> {
+    let closest = choose_closest(current_dir, paths)?;
+    if cargo_manifest_has_package(&closest) {
+        return Some(closest);
+    }
+    let package_manifests = paths
+        .iter()
+        .filter(|path| cargo_manifest_has_package(path))
+        .cloned()
+        .collect::<Vec<_>>();
+    choose_closest(current_dir, &package_manifests)
 }
 
 fn path_distance(from: &Path, to_file: &Path) -> usize {

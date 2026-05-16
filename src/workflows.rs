@@ -22,7 +22,7 @@ pub fn detect_workflows(root: &Path) -> Vec<WorkflowInfo> {
         }
         let path = entry.path();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        if ext != "yaml" && ext != "yaml" {
+        if ext != "yaml" && ext != "yml" {
             continue;
         }
         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
@@ -32,6 +32,7 @@ pub fn detect_workflows(root: &Path) -> Vec<WorkflowInfo> {
             });
         }
     }
+    workflows.sort_by(|a, b| a.file.cmp(&b.file));
     workflows
 }
 
@@ -110,7 +111,7 @@ pub fn gh_latest_status_json(workflow: &str) -> GhRunInfo {
                 run_id: None,
                 html_url: None,
                 updated_at: None,
-            }
+            };
         }
     };
     if !output.status.success() {
