@@ -75,17 +75,17 @@ pub fn badge_for_license(owner: &str, repo: &str) -> Badge {
     }
 }
 
-pub fn badge_for_workflow(owner: &str, repo: &str, workflow: &str) -> Badge {
+pub fn badge_for_workflow(owner: &str, repo: &str, workflow_file: &str) -> Badge {
     Badge {
         kind: BadgeKind::Ci,
         label: "CI".to_string(),
         image_url: format!(
-            "https://github.com/{}/{}/actions/workflows/{}.yaml/badge.svg",
-            owner, repo, workflow
+            "https://github.com/{}/{}/actions/workflows/{}/badge.svg",
+            owner, repo, workflow_file
         ),
         link_url: Some(format!(
-            "https://github.com/{}/{}/actions/workflows/{}.yaml",
-            owner, repo, workflow
+            "https://github.com/{}/{}/actions/workflows/{}",
+            owner, repo, workflow_file
         )),
     }
 }
