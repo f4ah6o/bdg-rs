@@ -1,4 +1,4 @@
-use bdg::version::{classify_version, VersionOptions};
+use bdg::version::{VersionOptions, classify_version};
 
 #[test]
 fn calver_formats() {

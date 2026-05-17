@@ -1,4 +1,4 @@
-use bdg::readme::{rewrite_marker_block_lines, BDG_BEGIN, BDG_END};
+use bdg::readme::{BDG_BEGIN, BDG_END, rewrite_marker_block_lines};
 use bdg::readme_badges::parse_badge_line;
 use bdg::readme_remove::remove_block_lines_by_id_kind;
 

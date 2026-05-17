@@ -18,7 +18,6 @@ use crate::readme_remove::remove_block_lines_by_id_kind;
 use crate::version::VersionOptions;
 use crate::workflows::{WorkflowInfo, detect_workflows, gh_latest_status_json};
 use anyhow::Context;
-use dialoguer::MultiSelect;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -84,7 +83,10 @@ pub fn cmd_add(
     let selected = if yes {
         filtered
     } else if !only.is_empty() {
-        prompt_badges(&filtered)?
+        match prompt_badges(&filtered)? {
+            Some(selected) => selected,
+            None => return Ok(0),
+        }
     } else {
         let items: Vec<String> = filtered
             .iter()
@@ -287,20 +289,21 @@ pub fn cmd_skills() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn prompt_badges(badges: &[Badge]) -> anyhow::Result<Vec<Badge>> {
+fn prompt_badges(badges: &[Badge]) -> anyhow::Result<Option<Vec<Badge>>> {
     if badges.is_empty() {
-        return Ok(Vec::new());
+        return Ok(Some(Vec::new()));
     }
     let items: Vec<String> = badges.iter().map(|b| b.render_markdown()).collect();
-    let selections = MultiSelect::new()
-        .with_prompt("Select badges to add")
-        .items(&items)
-        .interact()?;
-    let chosen = selections
+    let selection = crate::tui::run_multi_select("Select badges to add", None, &items, &[])?;
+    if selection.cancelled {
+        return Ok(None);
+    }
+    let chosen = selection
+        .selected
         .into_iter()
         .filter_map(|idx| badges.get(idx).cloned())
         .collect();
-    Ok(chosen)
+    Ok(Some(chosen))
 }
 
 fn filter_badges(badges: Vec<Badge>, only: &[String]) -> Vec<Badge> {

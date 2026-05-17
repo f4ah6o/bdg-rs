@@ -1,7 +1,19 @@
-use clap::Parser;
-
 fn main() -> anyhow::Result<std::process::ExitCode> {
-    let cli = bdg::cli::Cli::parse();
+    let cli = match bdg::cli::parse_args(std::env::args().skip(1)) {
+        Ok(bdg::cli::ParseOutcome::Run(cli)) => cli,
+        Ok(bdg::cli::ParseOutcome::Help) => {
+            print!("{}", bdg::cli::help());
+            return Ok(std::process::ExitCode::SUCCESS);
+        }
+        Ok(bdg::cli::ParseOutcome::Version) => {
+            println!("{}", env!("CARGO_PKG_VERSION"));
+            return Ok(std::process::ExitCode::SUCCESS);
+        }
+        Err(message) => {
+            eprintln!("error: {message}\n\n{}", bdg::cli::help());
+            return Ok(std::process::ExitCode::from(2));
+        }
+    };
     let current_dir = std::env::current_dir()?;
     match cli.command {
         bdg::cli::Commands::Add {
