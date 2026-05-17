@@ -1,14 +1,14 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
+use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
-use ratatui::Terminal;
 use std::io::{self, Stdout};
 
 pub struct TuiSelection {
@@ -125,7 +125,7 @@ fn run_loop(
                         return Ok(TuiSelection {
                             selected: Vec::new(),
                             cancelled: true,
-                        })
+                        });
                     }
                     KeyEvent {
                         code: KeyCode::Up, ..
@@ -145,7 +145,7 @@ fn run_loop(
                         return Ok(TuiSelection {
                             selected: state.selected.clone(),
                             cancelled: false,
-                        })
+                        });
                     }
                     _ => {}
                 }
