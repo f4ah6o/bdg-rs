@@ -28,6 +28,22 @@ fn parses_package_json() {
 }
 
 #[test]
+fn parses_package_json_private_flag() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("package.json");
+    fs::write(
+        &path,
+        r#"{ "name": "private-root", "version": "1.0.0", "private": true }"#,
+    )
+    .unwrap();
+
+    let pkg = read_package_json(&path).unwrap();
+
+    assert_eq!(pkg.name.as_deref(), Some("private-root"));
+    assert_eq!(pkg.private, Some(true));
+}
+
+#[test]
 fn parses_moon_mod_json() {
     let path = fixture("moon.mod.json");
     let module = read_moon_mod(&path).unwrap();

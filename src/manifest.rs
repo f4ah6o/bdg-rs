@@ -1,16 +1,17 @@
 use serde::Deserialize;
 use std::path::Path;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct PackageJson {
     pub name: Option<String>,
     pub version: Option<String>,
+    pub private: Option<bool>,
     pub description: Option<String>,
     pub license: Option<String>,
     pub repository: Option<RepositoryField>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum RepositoryField {
     String(String),

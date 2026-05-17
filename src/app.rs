@@ -20,7 +20,7 @@ use crate::workflows::{WorkflowInfo, detect_workflows, gh_latest_status_json};
 use anyhow::Context;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const BDG_SKILL: &str = include_str!("../.agents/skills/bdg/SKILL.md");
 
@@ -32,6 +32,65 @@ pub struct ResolvedMetadata {
     pub repository: Option<String>,
     pub description: Option<String>,
     pub registry: Option<RegistryMetadata>,
+}
+
+#[derive(Debug, Clone)]
+struct NpmPackage {
+    path: PathBuf,
+    name: String,
+    version: Option<String>,
+    license: Option<String>,
+    repository: Option<RepositoryField>,
+    description: Option<String>,
+    private: bool,
+    registry: RegistryMetadata,
+    published: bool,
+}
+
+fn local_npm_packages(context: &ProjectContext) -> Vec<NpmPackage> {
+    let mut seen = HashSet::new();
+    let mut packages = Vec::new();
+    for path in &context.manifests.package_json_all {
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        let Ok(pkg) = read_package_json(path) else {
+            continue;
+        };
+        if pkg.private.unwrap_or(false) {
+            continue;
+        }
+        let Some(name) = pkg.name.clone() else {
+            continue;
+        };
+        let registry = fetch_npm_metadata(&name).unwrap_or_else(|_| RegistryMetadata::empty());
+        let published = registry.version.is_some();
+        packages.push(NpmPackage {
+            path: path.clone(),
+            name,
+            version: pkg.version,
+            license: pkg.license,
+            repository: pkg.repository,
+            description: pkg.description,
+            private: false,
+            registry,
+            published,
+        });
+    }
+    packages.sort_by(|a, b| a.path.cmp(&b.path));
+    packages
+}
+
+fn select_representative_npm_package(
+    packages: &[NpmPackage],
+    repo_name: Option<&str>,
+) -> Option<NpmPackage> {
+    if let Some(repo_name) = repo_name {
+        if let Some(package) = packages.iter().find(|package| package.name == repo_name) {
+            return Some(package.clone());
+        }
+    }
+    packages.first().cloned()
 }
 
 pub fn cmd_add(
@@ -46,17 +105,14 @@ pub fn cmd_add(
     let config = load_config_for_context(&context)?;
     let options = version_options(&context, Some((allow_yy_calver, &config)));
     let readme_path = resolve_readme(&context.root, context.has_moonbit());
-    let metadata = resolve_metadata(&context)?;
+    let npm_packages = local_npm_packages(&context);
+    let metadata = resolve_metadata(&context, Some(&npm_packages))?;
     let (owner, repo) = infer_owner_repo(&metadata.repository);
     let workflows = detect_workflows(&context.root);
 
     let mut candidates = Vec::new();
-    if let Some(path) = &context.manifests.package_json {
-        if let Ok(pkg) = read_package_json(path) {
-            if let Some(name) = pkg.name.as_deref() {
-                candidates.push(badge_for_npm(name));
-            }
-        }
+    for package in npm_packages.iter().filter(|package| package.published) {
+        candidates.push(badge_for_npm(&package.name));
     }
     if let Some(path) = &context.manifests.cargo_toml {
         if let Ok(package) = read_resolved_cargo_package(path) {
@@ -458,37 +514,58 @@ fn shorten(text: &str, max: usize) -> String {
     output
 }
 
-fn resolve_metadata(context: &ProjectContext) -> anyhow::Result<ResolvedMetadata> {
+fn resolve_metadata(
+    context: &ProjectContext,
+    npm_packages: Option<&[NpmPackage]>,
+) -> anyhow::Result<ResolvedMetadata> {
     match context.ecosystem {
-        Some(Ecosystem::Node) => resolve_node_metadata(context),
+        Some(Ecosystem::Node) => resolve_node_metadata(context, npm_packages),
         Some(Ecosystem::MoonBit) => resolve_moonbit_metadata(context),
         Some(Ecosystem::Rust) => resolve_rust_metadata(context),
         None => Ok(ResolvedMetadata::default()),
     }
 }
 
-fn resolve_node_metadata(context: &ProjectContext) -> anyhow::Result<ResolvedMetadata> {
-    let manifest_path = context
-        .manifests
-        .package_json
-        .as_ref()
-        .context("package.json missing")?;
-    let package = read_package_json(manifest_path)?;
-    let registry = package
-        .name
-        .as_deref()
-        .and_then(|name| fetch_npm_metadata(name).ok())
-        .unwrap_or_else(RegistryMetadata::empty);
+fn resolve_node_metadata(
+    context: &ProjectContext,
+    npm_packages: Option<&[NpmPackage]>,
+) -> anyhow::Result<ResolvedMetadata> {
+    let local_packages;
+    let packages = match npm_packages {
+        Some(packages) => packages,
+        None => {
+            local_packages = local_npm_packages(context);
+            &local_packages
+        }
+    };
+    let repo_name = context.git.as_ref().and_then(|git| git.repo.as_deref());
+    let package = select_representative_npm_package(
+        &packages
+            .iter()
+            .filter(|package| package.published)
+            .cloned()
+            .collect::<Vec<_>>(),
+        repo_name,
+    )
+    .or_else(|| packages.first().cloned())
+    .with_context(|| {
+        if context.manifests.package_json_all.is_empty() {
+            "package.json missing"
+        } else {
+            "no publishable npm packages found"
+        }
+    })?;
     Ok(ResolvedMetadata {
-        name: package.name,
-        version: registry.version.clone().or(package.version),
-        license: registry.license.clone().or(package.license),
-        repository: registry
+        name: Some(package.name.clone()),
+        version: package.registry.version.clone().or(package.version),
+        license: package.registry.license.clone().or(package.license),
+        repository: package
+            .registry
             .repository
             .clone()
             .or_else(|| repository_to_string(package.repository)),
-        description: registry.description.clone().or(package.description),
-        registry: Some(registry),
+        description: package.registry.description.clone().or(package.description),
+        registry: Some(package.registry),
     })
 }
 
@@ -773,8 +850,9 @@ fn build_list_json(
         },
     };
 
-    let manifests = collect_manifests(context, options)?;
-    let registries = collect_registries(context, options)?;
+    let npm_packages = local_npm_packages(context);
+    let manifests = collect_manifests(context, options, &npm_packages)?;
+    let registries = collect_registries(context, options, &npm_packages)?;
     let ci = build_ci_json(context)?;
     let readme_block = build_readme_block(badges);
 
@@ -801,10 +879,34 @@ fn build_list_json(
 fn collect_manifests(
     context: &ProjectContext,
     options: &VersionOptions,
+    node_packages: &[NpmPackage],
 ) -> anyhow::Result<HashMap<String, serde_json::Value>> {
     let mut manifests = HashMap::new();
-    if let Some(path) = &context.manifests.package_json {
-        let pkg = read_package_json(path)?;
+    let representative_node = select_representative_npm_package(
+        node_packages,
+        context.git.as_ref().and_then(|git| git.repo.as_deref()),
+    )
+    .or_else(|| {
+        context
+            .manifests
+            .package_json
+            .as_ref()
+            .and_then(|path| read_package_json(path).ok().map(|pkg| (path, pkg)))
+            .and_then(|(path, pkg)| {
+                Some(NpmPackage {
+                    path: path.clone(),
+                    name: pkg.name?,
+                    version: pkg.version,
+                    license: pkg.license,
+                    repository: pkg.repository,
+                    description: pkg.description,
+                    private: pkg.private.unwrap_or(false),
+                    registry: RegistryMetadata::empty(),
+                    published: false,
+                })
+            })
+    });
+    if let Some(pkg) = representative_node {
         let repo = repository_to_string(pkg.repository);
         let version_info = pkg
             .version
@@ -813,7 +915,7 @@ fn collect_manifests(
         manifests.insert(
             "node".to_string(),
             serde_json::json!({
-                "path": path.to_string_lossy(),
+                "path": pkg.path.to_string_lossy(),
                 "name": pkg.name,
                 "version": pkg.version,
                 "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
@@ -822,7 +924,37 @@ fn collect_manifests(
                 "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
                 "license": pkg.license,
                 "repository": repo,
+                "private": pkg.private,
+                "published": pkg.published,
             }),
+        );
+    }
+    if !node_packages.is_empty() {
+        let packages = node_packages
+            .iter()
+            .map(|pkg| {
+                let version_info = pkg
+                    .version
+                    .as_deref()
+                    .map(|v| crate::version::classify_version(v, options));
+                serde_json::json!({
+                    "path": pkg.path.to_string_lossy(),
+                    "name": pkg.name,
+                    "version": pkg.version,
+                    "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
+                    "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
+                    "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
+                    "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
+                    "license": pkg.license,
+                    "repository": repository_to_string(pkg.repository.clone()),
+                    "private": pkg.private,
+                    "published": pkg.published,
+                })
+            })
+            .collect::<Vec<_>>();
+        manifests.insert(
+            "node_packages".to_string(),
+            serde_json::Value::Array(packages),
         );
     }
     if let Some(path) = &context.manifests.cargo_toml {
@@ -873,45 +1005,76 @@ fn collect_manifests(
 fn collect_registries(
     context: &ProjectContext,
     options: &VersionOptions,
+    npm_packages: &[NpmPackage],
 ) -> anyhow::Result<HashMap<String, serde_json::Value>> {
     let mut registries = HashMap::new();
-    if let Some(path) = &context.manifests.package_json {
-        let pkg = read_package_json(path)?;
-        if let Some(name) = pkg.name.as_deref() {
-            match fetch_npm_metadata(name) {
-                Ok(meta) => {
-                    let version_info = meta
-                        .version
-                        .as_deref()
-                        .map(|v| crate::version::classify_version(v, options));
-                    registries.insert(
-                        "npm".to_string(),
-                        serde_json::json!({
-                            "ok": true,
-                            "package": name,
-                            "latest": meta.version,
-                            "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                            "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                            "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                            "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                            "license": meta.license,
-                            "homepage": meta.homepage,
-                            "repository": meta.repository,
-                        }),
-                    );
-                }
-                Err(_) => {
-                    registries.insert(
-                        "npm".to_string(),
-                        serde_json::json!({
-                            "ok": false,
-                            "package": name,
-                            "reason": "network",
-                        }),
-                    );
-                }
-            }
-        }
+    let npm_registry_packages = npm_packages
+        .iter()
+        .map(|package| {
+            let version_info = package
+                .registry
+                .version
+                .as_deref()
+                .map(|v| crate::version::classify_version(v, options));
+            serde_json::json!({
+                "ok": package.published,
+                "package": package.name,
+                "path": package.path.to_string_lossy(),
+                "latest": package.registry.version,
+                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
+                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
+                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
+                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
+                "license": package.registry.license,
+                "homepage": package.registry.homepage,
+                "repository": package.registry.repository,
+                "reason": if package.published { None } else { Some("unavailable") },
+            })
+        })
+        .collect::<Vec<_>>();
+    if !npm_registry_packages.is_empty() {
+        registries.insert(
+            "npm_packages".to_string(),
+            serde_json::Value::Array(npm_registry_packages),
+        );
+    }
+    let published_packages = npm_packages
+        .iter()
+        .filter(|package| package.published)
+        .cloned()
+        .collect::<Vec<_>>();
+    if let Some(package) = select_representative_npm_package(
+        &published_packages,
+        context.git.as_ref().and_then(|git| git.repo.as_deref()),
+    )
+    .or_else(|| {
+        select_representative_npm_package(
+            npm_packages,
+            context.git.as_ref().and_then(|git| git.repo.as_deref()),
+        )
+    }) {
+        let version_info = package
+            .registry
+            .version
+            .as_deref()
+            .map(|v| crate::version::classify_version(v, options));
+        registries.insert(
+            "npm".to_string(),
+            serde_json::json!({
+                "ok": package.published,
+                "package": package.name,
+                "path": package.path.to_string_lossy(),
+                "latest": package.registry.version,
+                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
+                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
+                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
+                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
+                "license": package.registry.license,
+                "homepage": package.registry.homepage,
+                "repository": package.registry.repository,
+                "reason": if package.published { None } else { Some("unavailable") },
+            }),
+        );
     }
     if let Some(path) = &context.manifests.cargo_toml {
         if let Some(package) = read_resolved_cargo_package(path)? {
@@ -1055,5 +1218,61 @@ fn readme_badge_from_parsed(parsed: ParsedBadge) -> ReadmeBadgeJson {
         source: parsed.source,
         meta: parsed.meta,
         raw: parsed.raw,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NpmPackage, select_representative_npm_package};
+    use crate::providers::RegistryMetadata;
+    use std::path::PathBuf;
+
+    fn npm_package(path: &str, name: &str) -> NpmPackage {
+        NpmPackage {
+            path: PathBuf::from(path),
+            name: name.to_string(),
+            version: Some("1.0.0".to_string()),
+            license: None,
+            repository: None,
+            description: None,
+            private: false,
+            registry: RegistryMetadata {
+                version: Some("1.0.0".to_string()),
+                license: None,
+                repository: None,
+                description: None,
+                downloads: None,
+                homepage: None,
+            },
+            published: true,
+        }
+    }
+
+    #[test]
+    fn representative_npm_package_prefers_repo_name() {
+        let selected = select_representative_npm_package(
+            &[
+                npm_package("packages/core/package.json", "n8n-core"),
+                npm_package("packages/cli/package.json", "n8n"),
+            ],
+            Some("n8n"),
+        )
+        .expect("selected");
+
+        assert_eq!(selected.name, "n8n");
+    }
+
+    #[test]
+    fn representative_npm_package_falls_back_to_sorted_first() {
+        let selected = select_representative_npm_package(
+            &[
+                npm_package("packages/cli/package.json", "n8n"),
+                npm_package("packages/core/package.json", "n8n-core"),
+            ],
+            Some("other"),
+        )
+        .expect("selected");
+
+        assert_eq!(selected.name, "n8n");
     }
 }
