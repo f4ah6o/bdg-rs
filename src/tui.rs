@@ -107,48 +107,48 @@ fn run_loop(
             frame.render_widget(hint, layout[list_index + 1]);
         })?;
 
-        if event::poll(std::time::Duration::from_millis(250))? {
-            if let Event::Key(key) = event::read()? {
-                match key {
-                    KeyEvent {
-                        code: KeyCode::Char('q'),
-                        ..
-                    }
-                    | KeyEvent {
-                        code: KeyCode::Esc, ..
-                    }
-                    | KeyEvent {
-                        code: KeyCode::Char('c'),
-                        modifiers: KeyModifiers::CONTROL,
-                        ..
-                    } => {
-                        return Ok(TuiSelection {
-                            selected: Vec::new(),
-                            cancelled: true,
-                        });
-                    }
-                    KeyEvent {
-                        code: KeyCode::Up, ..
-                    } => state.previous(),
-                    KeyEvent {
-                        code: KeyCode::Down,
-                        ..
-                    } => state.next(),
-                    KeyEvent {
-                        code: KeyCode::Char(' '),
-                        ..
-                    } => state.toggle(),
-                    KeyEvent {
-                        code: KeyCode::Enter,
-                        ..
-                    } => {
-                        return Ok(TuiSelection {
-                            selected: state.selected.clone(),
-                            cancelled: false,
-                        });
-                    }
-                    _ => {}
+        if event::poll(std::time::Duration::from_millis(250))?
+            && let Event::Key(key) = event::read()?
+        {
+            match key {
+                KeyEvent {
+                    code: KeyCode::Char('q'),
+                    ..
                 }
+                | KeyEvent {
+                    code: KeyCode::Esc, ..
+                }
+                | KeyEvent {
+                    code: KeyCode::Char('c'),
+                    modifiers: KeyModifiers::CONTROL,
+                    ..
+                } => {
+                    return Ok(TuiSelection {
+                        selected: Vec::new(),
+                        cancelled: true,
+                    });
+                }
+                KeyEvent {
+                    code: KeyCode::Up, ..
+                } => state.previous(),
+                KeyEvent {
+                    code: KeyCode::Down,
+                    ..
+                } => state.next(),
+                KeyEvent {
+                    code: KeyCode::Char(' '),
+                    ..
+                } => state.toggle(),
+                KeyEvent {
+                    code: KeyCode::Enter,
+                    ..
+                } => {
+                    return Ok(TuiSelection {
+                        selected: state.selected.clone(),
+                        cancelled: false,
+                    });
+                }
+                _ => {}
             }
         }
     }

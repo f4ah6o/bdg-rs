@@ -1,6 +1,7 @@
 use crate::badges::{
-    Badge, badge_for_crates, badge_for_license, badge_for_license_text, badge_for_moonbit,
-    badge_for_npm, badge_for_workflow,
+    Badge, badge_for_codecov, badge_for_crates, badge_for_crates_downloads, badge_for_docs_rs,
+    badge_for_docs_url, badge_for_github_release, badge_for_license, badge_for_license_text,
+    badge_for_moonbit, badge_for_npm, badge_for_npm_downloads, badge_for_workflow,
 };
 use crate::config::{Config, load_config};
 use crate::core::{Ecosystem, ProjectContext, build_context};
@@ -85,10 +86,10 @@ fn select_representative_npm_package(
     packages: &[NpmPackage],
     repo_name: Option<&str>,
 ) -> Option<NpmPackage> {
-    if let Some(repo_name) = repo_name {
-        if let Some(package) = packages.iter().find(|package| package.name == repo_name) {
-            return Some(package.clone());
-        }
+    if let Some(repo_name) = repo_name
+        && let Some(package) = packages.iter().find(|package| package.name == repo_name)
+    {
+        return Some(package.clone());
     }
     packages.first().cloned()
 }
@@ -113,19 +114,35 @@ pub fn cmd_add(
     let mut candidates = Vec::new();
     for package in npm_packages.iter().filter(|package| package.published) {
         candidates.push(badge_for_npm(&package.name));
-    }
-    if let Some(path) = &context.manifests.cargo_toml {
-        if let Ok(package) = read_resolved_cargo_package(path) {
-            if let Some(name) = package.and_then(|package| package.name) {
-                candidates.push(badge_for_crates(&name));
-            }
+        candidates.push(badge_for_npm_downloads(&package.name));
+        if let Some(homepage) = package
+            .registry
+            .homepage
+            .as_deref()
+            .map(str::trim)
+            .filter(|homepage| !homepage.is_empty())
+        {
+            candidates.push(badge_for_docs_url(homepage));
         }
     }
-    if let Some(path) = &context.manifests.moon_mod {
-        if let Ok(module) = read_moon_mod(path) {
-            if let Some(name) = module.name.as_deref() {
-                candidates.push(badge_for_moonbit(name));
-            }
+    if let Some(path) = &context.manifests.cargo_toml
+        && let Ok(package) = read_resolved_cargo_package(path)
+        && let Some(name) = package.and_then(|package| package.name)
+    {
+        candidates.push(badge_for_crates(&name));
+        candidates.push(badge_for_crates_downloads(&name));
+        candidates.push(badge_for_docs_rs(&name));
+    }
+    if let Some(path) = &context.manifests.moon_mod
+        && let Ok(module) = read_moon_mod(path)
+        && let Some(name) = module.name.as_deref()
+    {
+        candidates.push(badge_for_moonbit(name));
+        if name.contains('/') {
+            candidates.push(badge_for_docs_url(&format!(
+                "https://mooncakes.io/docs/{}",
+                name
+            )));
         }
     }
     if let Some(license) = metadata
@@ -142,6 +159,8 @@ pub fn cmd_add(
         candidates.push(badge_for_license(owner, repo));
     }
     if let (Some(owner), Some(repo)) = (owner.as_deref(), repo.as_deref()) {
+        candidates.push(badge_for_github_release(owner, repo));
+        candidates.push(badge_for_codecov(owner, repo));
         for workflow in workflows {
             candidates.push(badge_for_workflow(owner, repo, &workflow.file));
         }
@@ -260,6 +279,7 @@ pub fn cmd_list(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn cmd_remove(
     current_dir: &Path,
     all: bool,
@@ -320,14 +340,15 @@ pub fn cmd_remove(
         rewrite_marker_block(&content, &remaining)?
     };
     let diff = unified_diff(&readme_path, &content, &updated);
-    if let Some(removal) = &removal_result {
-        if !json && !quiet {
-            print_remove_summary(
-                readme_path.to_string_lossy().as_ref(),
-                removal,
-                remaining.len(),
-            );
-        }
+    if let Some(removal) = &removal_result
+        && !json
+        && !quiet
+    {
+        print_remove_summary(
+            readme_path.to_string_lossy().as_ref(),
+            removal,
+            remaining.len(),
+        );
     }
     if dry_run {
         if json {
@@ -388,6 +409,7 @@ fn filter_badges(badges: Vec<Badge>, only: &[String]) -> Vec<Badge> {
             crate::badges::BadgeKind::Release => only_lower.contains("release"),
             crate::badges::BadgeKind::Docs => only_lower.contains("docs"),
             crate::badges::BadgeKind::Downloads => only_lower.contains("downloads"),
+            crate::badges::BadgeKind::Coverage => only_lower.contains("coverage"),
         })
         .collect()
 }
@@ -406,10 +428,10 @@ fn format_badge_label(
                 .and_then(|rest| rest.split('/').next())
                 .unwrap_or("workflow");
             let status = crate::workflows::gh_latest_status_json(workflow);
-            if status.ok {
-                if let Some(conclusion) = status.conclusion {
-                    return format!("CI ({}) last: {}", workflow, conclusion);
-                }
+            if status.ok
+                && let Some(conclusion) = status.conclusion
+            {
+                return format!("CI ({}) last: {}", workflow, conclusion);
             }
             format!("CI ({})", workflow)
         }
@@ -429,6 +451,7 @@ fn format_badge_label(
         crate::badges::BadgeKind::Release => "release".to_string(),
         crate::badges::BadgeKind::Docs => "docs".to_string(),
         crate::badges::BadgeKind::Downloads => "downloads".to_string(),
+        crate::badges::BadgeKind::Coverage => "coverage".to_string(),
     }
 }
 
@@ -969,27 +992,27 @@ fn collect_manifests(
             serde_json::Value::Array(packages),
         );
     }
-    if let Some(path) = &context.manifests.cargo_toml {
-        if let Some(package) = read_resolved_cargo_package(path)? {
-            let version_info = package
-                .version
-                .as_deref()
-                .map(|v| crate::version::classify_version(v, options));
-            manifests.insert(
-                "rust".to_string(),
-                serde_json::json!({
-                    "path": path.to_string_lossy(),
-                    "name": package.name,
-                    "version": package.version,
-                    "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                    "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                    "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                    "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                    "license": package.license,
-                    "repository": package.repository,
-                }),
-            );
-        }
+    if let Some(path) = &context.manifests.cargo_toml
+        && let Some(package) = read_resolved_cargo_package(path)?
+    {
+        let version_info = package
+            .version
+            .as_deref()
+            .map(|v| crate::version::classify_version(v, options));
+        manifests.insert(
+            "rust".to_string(),
+            serde_json::json!({
+                "path": path.to_string_lossy(),
+                "name": package.name,
+                "version": package.version,
+                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
+                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
+                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
+                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
+                "license": package.license,
+                "repository": package.repository,
+            }),
+        );
     }
     if let Some(path) = &context.manifests.moon_mod {
         let module = read_moon_mod(path)?;
@@ -1088,42 +1111,41 @@ fn collect_registries(
             }),
         );
     }
-    if let Some(path) = &context.manifests.cargo_toml {
-        if let Some(package) = read_resolved_cargo_package(path)? {
-            if let Some(name) = package.name.as_deref() {
-                match fetch_crates_metadata(name) {
-                    Ok(meta) => {
-                        let version_info = meta
-                            .version
-                            .as_deref()
-                            .map(|v| crate::version::classify_version(v, options));
-                        registries.insert(
-                        "crates".to_string(),
-                        serde_json::json!({
-                            "ok": true,
-                            "crate": name,
-                            "latest": meta.version,
-                            "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                            "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                            "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                            "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                            "license": meta.license,
-                            "repository": meta.repository,
-                            "downloads": meta.downloads,
-                        }),
-                    );
-                    }
-                    Err(_) => {
-                        registries.insert(
-                            "crates".to_string(),
-                            serde_json::json!({
-                                "ok": false,
-                                "crate": name,
-                                "reason": "network",
-                            }),
-                        );
-                    }
-                }
+    if let Some(path) = &context.manifests.cargo_toml
+        && let Some(package) = read_resolved_cargo_package(path)?
+        && let Some(name) = package.name.as_deref()
+    {
+        match fetch_crates_metadata(name) {
+            Ok(meta) => {
+                let version_info = meta
+                    .version
+                    .as_deref()
+                    .map(|v| crate::version::classify_version(v, options));
+                registries.insert(
+                    "crates".to_string(),
+                    serde_json::json!({
+                        "ok": true,
+                        "crate": name,
+                        "latest": meta.version,
+                        "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
+                        "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
+                        "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
+                        "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
+                        "license": meta.license,
+                        "repository": meta.repository,
+                        "downloads": meta.downloads,
+                    }),
+                );
+            }
+            Err(_) => {
+                registries.insert(
+                    "crates".to_string(),
+                    serde_json::json!({
+                        "ok": false,
+                        "crate": name,
+                        "reason": "network",
+                    }),
+                );
             }
         }
     }
@@ -1156,17 +1178,17 @@ fn build_ci_json(context: &ProjectContext) -> anyhow::Result<CiJson> {
 fn workflow_to_json(context: &ProjectContext, workflow: &WorkflowInfo) -> WorkflowJson {
     let mut image = String::new();
     let mut link = String::new();
-    if let Some(git) = &context.git {
-        if let (Some(owner), Some(repo)) = (git.owner.as_deref(), git.repo.as_deref()) {
-            image = format!(
-                "https://github.com/{}/{}/actions/workflows/{}/badge.svg",
-                owner, repo, workflow.file
-            );
-            link = format!(
-                "https://github.com/{}/{}/actions/workflows/{}",
-                owner, repo, workflow.file
-            );
-        }
+    if let Some(git) = &context.git
+        && let (Some(owner), Some(repo)) = (git.owner.as_deref(), git.repo.as_deref())
+    {
+        image = format!(
+            "https://github.com/{}/{}/actions/workflows/{}/badge.svg",
+            owner, repo, workflow.file
+        );
+        link = format!(
+            "https://github.com/{}/{}/actions/workflows/{}",
+            owner, repo, workflow.file
+        );
     }
     let status = gh_latest_status_json(&workflow.file);
     WorkflowJson {

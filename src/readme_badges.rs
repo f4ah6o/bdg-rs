@@ -153,6 +153,13 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
             Some(serde_json::json!({ "crate": crate_name })),
         );
     }
+    if let Some(crate_name) = extract_docs_rs_crate(image_trimmed) {
+        return (
+            "docs".to_string(),
+            format!("docs:docsrs:{}", crate_name),
+            Some(serde_json::json!({ "crate": crate_name, "provider": "docs.rs" })),
+        );
+    }
     if image_trimmed.contains("img.shields.io/github/license/") {
         return ("license".to_string(), "license:github".to_string(), None);
     }
@@ -163,11 +170,11 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
             Some(serde_json::json!({ "license": license })),
         );
     }
-    if image_trimmed.contains("img.shields.io/github/v/release/") {
+    if let Some((owner, repo)) = extract_github_release_repo(image_trimmed) {
         return (
             "github_release".to_string(),
             "release:github".to_string(),
-            None,
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
         );
     }
     if let Some((owner, repo)) = extract_codecov_repo(image_trimmed) {
@@ -177,14 +184,14 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
             Some(serde_json::json!({ "owner": owner, "repo": repo })),
         );
     }
-    if let Some((label, message)) = extract_custom_badge(image_trimmed) {
-        if label.eq_ignore_ascii_case("docs") {
-            return (
-                "docs".to_string(),
-                "docs:custom".to_string(),
-                Some(serde_json::json!({ "label": label, "message": message })),
-            );
-        }
+    if let Some((label, message)) = extract_custom_badge(image_trimmed)
+        && label.eq_ignore_ascii_case("docs")
+    {
+        return (
+            "docs".to_string(),
+            "docs:custom".to_string(),
+            Some(serde_json::json!({ "label": label, "message": message })),
+        );
     }
     (
         "unknown".to_string(),
@@ -222,12 +229,12 @@ fn decode_static_badge_segment(value: &str) -> String {
             decoded.push('-');
             idx += 2;
         } else if bytes[idx] == b'%' && idx + 2 < bytes.len() {
-            if let Ok(hex) = std::str::from_utf8(&bytes[idx + 1..idx + 3]) {
-                if let Ok(byte) = u8::from_str_radix(hex, 16) {
-                    decoded.push(byte as char);
-                    idx += 3;
-                    continue;
-                }
+            if let Ok(hex) = std::str::from_utf8(&bytes[idx + 1..idx + 3])
+                && let Ok(byte) = u8::from_str_radix(hex, 16)
+            {
+                decoded.push(byte as char);
+                idx += 3;
+                continue;
             }
             decoded.push(bytes[idx] as char);
             idx += 1;
@@ -253,6 +260,41 @@ fn extract_after_prefix(image: &str, prefix: &str) -> Option<String> {
 
 fn extract_codecov_repo(image: &str) -> Option<(String, String)> {
     let prefix = "img.shields.io/codecov/c/github/";
+    let pos = image.find(prefix)?;
+    let remainder = &image[pos + prefix.len()..];
+    let before_query = remainder.split('?').next().unwrap_or("");
+    let mut parts = before_query.split('/');
+    let owner = parts.next()?.to_string();
+    let repo = parts.next()?.trim_end_matches(".svg").to_string();
+    if owner.is_empty() || repo.is_empty() {
+        None
+    } else {
+        Some((owner, repo))
+    }
+}
+
+fn extract_github_release_repo(image: &str) -> Option<(String, String)> {
+    let prefix = "img.shields.io/github/v/release/";
+    extract_owner_repo_after_prefix(image, prefix)
+}
+
+fn extract_docs_rs_crate(image: &str) -> Option<String> {
+    let prefix = "docs.rs/";
+    let pos = image.find(prefix)?;
+    let remainder = &image[pos + prefix.len()..];
+    let before_query = remainder.split('?').next().unwrap_or("");
+    let crate_name = before_query
+        .strip_suffix("/badge.svg")
+        .or_else(|| before_query.strip_suffix("/badge.svg?"))
+        .unwrap_or(before_query);
+    if crate_name.is_empty() || crate_name.contains('/') {
+        None
+    } else {
+        Some(crate_name.to_string())
+    }
+}
+
+fn extract_owner_repo_after_prefix(image: &str, prefix: &str) -> Option<(String, String)> {
     let pos = image.find(prefix)?;
     let remainder = &image[pos + prefix.len()..];
     let before_query = remainder.split('?').next().unwrap_or("");

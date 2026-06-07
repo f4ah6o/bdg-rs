@@ -11,6 +11,7 @@ Interactive badge manager CLI for README files. It detects project metadata, sug
 - Reads registry metadata (npm, crates)
 - Detects GitHub Actions workflows
 - Adds/removes badges safely inside marker block
+- Supports version, CI, license, release, docs, downloads, and coverage badges
 - Optional TUI with multi-select for add/remove
 
 ## Installation
@@ -22,7 +23,7 @@ cargo install bdg
 ```bash
 bdg add
 bdg add --yes
-bdg add --only ci,version,license
+bdg add --only ci,version,license,release,docs,downloads,coverage
 bdg add --dry-run
 
 bdg list
@@ -72,7 +73,6 @@ Use `--allow-yy-calver` to opt in to YY.MM/YY.MM.MICRO calver patterns.
 - 0: no change or success
 - 2: changes detected in dry-run
 - 1: error
-
 
 
 

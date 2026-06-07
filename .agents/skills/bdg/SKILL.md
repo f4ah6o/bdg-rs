@@ -9,7 +9,7 @@ Use `bdg` when you need to inspect, add, or remove badges inside a README withou
 
 ## When To Use
 
-- You need to add badges for crates.io, npm, MoonBit, license, or GitHub Actions.
+- You need to add badges for crates.io, npm, MoonBit, license, GitHub Actions, releases, docs, downloads, or coverage.
 - You need to inspect the current managed badge block before changing it.
 - You need to remove badges by id, kind, or all at once while keeping edits constrained.
 
@@ -21,7 +21,7 @@ Adds badges to the managed block in the detected README.
 
 - `bdg add`
 - `bdg add --yes`
-- `bdg add --only ci,version,license`
+- `bdg add --only ci,version,license,release,docs,downloads,coverage`
 - `bdg add --dry-run`
 - `bdg add --json --dry-run`
 
@@ -29,6 +29,7 @@ Behavior:
 
 - Detects project metadata from `Cargo.toml`, `package.json`, or `moon.mod.json`.
 - Detects GitHub Actions workflows from `.github/workflows`.
+- Supports version, CI, license, release, docs, downloads, and coverage badge candidates.
 - Writes only inside the `<!-- bdg:begin -->` / `<!-- bdg:end -->` block.
 - Inserts the marker block if it does not exist yet.
 

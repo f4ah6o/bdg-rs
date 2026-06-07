@@ -28,7 +28,8 @@ fn remove_by_id_single() {
     let id_to_remove = badges[0].clone();
 
     let outcome =
-        remove_block_lines_by_id_kind(&content, &[id_to_remove.clone()], &[], false).unwrap();
+        remove_block_lines_by_id_kind(&content, std::slice::from_ref(&id_to_remove), &[], false)
+            .unwrap();
     let updated = rewrite_marker_block_lines(&content, &outcome.remaining).unwrap();
     assert!(!updated.contains(&id_to_remove));
     assert!(updated.contains("crates/v/foo"));

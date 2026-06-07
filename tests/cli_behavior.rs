@@ -30,6 +30,67 @@ repository = "https://github.com/f4ah6o/shuttle-rs"
 }
 
 #[test]
+fn add_yes_includes_practical_rust_badges() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        r#"
+[package]
+name = "bdg-practical-fixture"
+version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/f4ah6o/bdg-rs"
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["add", "--yes", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/crates/v/bdg-practical-fixture.svg"));
+    assert!(stdout.contains("img.shields.io/crates/d/bdg-practical-fixture.svg"));
+    assert!(stdout.contains("https://docs.rs/bdg-practical-fixture/badge.svg"));
+    assert!(stdout.contains("img.shields.io/github/v/release/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/codecov/c/github/f4ah6o/bdg-rs.svg"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn add_only_coverage_filters_practical_badges() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        r#"
+[package]
+name = "bdg-coverage-fixture"
+version = "0.1.0"
+repository = "https://github.com/f4ah6o/bdg-rs"
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["add", "--yes", "--only", "coverage", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/codecov/c/github/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/crates/v/bdg-coverage-fixture.svg"));
+    assert!(!stdout.contains("img.shields.io/github/v/release/f4ah6o/bdg-rs.svg"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn help_command_prints_usage() {
     let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
         .arg("--help")
