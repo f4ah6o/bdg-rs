@@ -30,6 +30,7 @@ Behavior:
 - Detects project metadata from `Cargo.toml`, `package.json`, or `moon.mod.json`.
 - Detects GitHub Actions workflows from `.github/workflows`.
 - Supports version, CI, license, release, docs, downloads, and coverage badge candidates.
+- Honors `.bdg.toml` `[badges] exclude = ["release", "coverage"]` for repositories that do not use those services.
 - Writes only inside the `<!-- bdg:begin -->` / `<!-- bdg:end -->` block.
 - Inserts the marker block if it does not exist yet.
 

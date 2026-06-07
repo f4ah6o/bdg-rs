@@ -47,3 +47,21 @@ fn does_not_escape_git_root() {
     let config = load_config(&cwd, &repo).unwrap();
     assert!(!config.version.allow_yy_calver);
 }
+
+#[test]
+fn reads_badge_exclusions() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(repo.join(".git")).unwrap();
+    fs::write(
+        repo.join(".bdg.toml"),
+        r#"
+[badges]
+exclude = ["release", "coverage"]
+"#,
+    )
+    .unwrap();
+
+    let config = load_config(&repo, &repo).unwrap();
+    assert_eq!(config.badges.exclude, vec!["release", "coverage"]);
+}

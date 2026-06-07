@@ -25,6 +25,7 @@ repository = "https://github.com/f4ah6o/shuttle-rs"
     assert_eq!(output.status.code(), Some(2));
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg"));
+    assert!(!stdout.contains("](https://github.com/f4ah6o/shuttle-rs)"));
     assert!(!stdout.contains("img.shields.io/github/license"));
     assert!(output.stderr.is_empty());
 }
@@ -58,6 +59,81 @@ repository = "https://github.com/f4ah6o/bdg-rs"
     assert!(stdout.contains("https://docs.rs/bdg-practical-fixture/badge.svg"));
     assert!(stdout.contains("img.shields.io/github/v/release/f4ah6o/bdg-rs.svg"));
     assert!(stdout.contains("img.shields.io/codecov/c/github/f4ah6o/bdg-rs.svg"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn add_yes_honors_configured_badge_exclusions() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        r#"
+[package]
+name = "bdg-exclusions-fixture"
+version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/f4ah6o/bdg-rs"
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        temp.path().join(".bdg.toml"),
+        r#"
+[badges]
+exclude = ["release", "coverage"]
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["add", "--yes", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/crates/v/bdg-exclusions-fixture.svg"));
+    assert!(stdout.contains("img.shields.io/crates/d/bdg-exclusions-fixture.svg"));
+    assert!(!stdout.contains("img.shields.io/github/v/release/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/codecov/c/github/f4ah6o/bdg-rs.svg"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn add_only_overrides_configured_badge_exclusions() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        r#"
+[package]
+name = "bdg-only-exclusions-fixture"
+version = "0.1.0"
+repository = "https://github.com/f4ah6o/bdg-rs"
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        temp.path().join(".bdg.toml"),
+        r#"
+[badges]
+exclude = ["coverage"]
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["add", "--yes", "--only", "coverage", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/codecov/c/github/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/crates/v/bdg-only-exclusions-fixture.svg"));
     assert!(output.stderr.is_empty());
 }
 

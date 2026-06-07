@@ -166,7 +166,7 @@ pub fn cmd_add(
         }
     }
 
-    let filtered = filter_badges(candidates, only);
+    let filtered = filter_badges(candidates, only, &config);
     let selected = if yes {
         filtered
     } else if !only.is_empty() {
@@ -395,23 +395,36 @@ fn prompt_badges(badges: &[Badge]) -> anyhow::Result<Option<Vec<Badge>>> {
     Ok(Some(chosen))
 }
 
-fn filter_badges(badges: Vec<Badge>, only: &[String]) -> Vec<Badge> {
+fn filter_badges(badges: Vec<Badge>, only: &[String], config: &Config) -> Vec<Badge> {
     if only.is_empty() {
-        return badges;
+        let excluded: HashSet<String> = config
+            .badges
+            .exclude
+            .iter()
+            .map(|s| s.trim().to_lowercase())
+            .collect();
+        return badges
+            .into_iter()
+            .filter(|badge| !excluded.contains(badge_kind_filter_name(badge.kind)))
+            .collect();
     }
     let only_lower: HashSet<String> = only.iter().map(|s| s.trim().to_lowercase()).collect();
     badges
         .into_iter()
-        .filter(|badge| match badge.kind {
-            crate::badges::BadgeKind::Ci => only_lower.contains("ci"),
-            crate::badges::BadgeKind::Version => only_lower.contains("version"),
-            crate::badges::BadgeKind::License => only_lower.contains("license"),
-            crate::badges::BadgeKind::Release => only_lower.contains("release"),
-            crate::badges::BadgeKind::Docs => only_lower.contains("docs"),
-            crate::badges::BadgeKind::Downloads => only_lower.contains("downloads"),
-            crate::badges::BadgeKind::Coverage => only_lower.contains("coverage"),
-        })
+        .filter(|badge| only_lower.contains(badge_kind_filter_name(badge.kind)))
         .collect()
+}
+
+fn badge_kind_filter_name(kind: crate::badges::BadgeKind) -> &'static str {
+    match kind {
+        crate::badges::BadgeKind::Ci => "ci",
+        crate::badges::BadgeKind::Version => "version",
+        crate::badges::BadgeKind::License => "license",
+        crate::badges::BadgeKind::Release => "release",
+        crate::badges::BadgeKind::Docs => "docs",
+        crate::badges::BadgeKind::Downloads => "downloads",
+        crate::badges::BadgeKind::Coverage => "coverage",
+    }
 }
 
 fn format_badge_label(
@@ -768,6 +781,7 @@ struct ListJson {
 #[derive(Debug, Serialize)]
 struct ConfigJson {
     version: ConfigVersionJson,
+    badges: ConfigBadgesJson,
 }
 
 #[derive(Debug, Serialize)]
@@ -775,6 +789,11 @@ struct ConfigVersionJson {
     allow_yy_calver: bool,
     year_min: i32,
     year_max: i32,
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigBadgesJson {
+    exclude: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -896,6 +915,9 @@ fn build_list_json(
             allow_yy_calver: cfg.version.allow_yy_calver,
             year_min: cfg.version.year_min,
             year_max: cfg.version.year_max,
+        },
+        badges: ConfigBadgesJson {
+            exclude: cfg.badges.exclude.clone(),
         },
     });
     Ok(ListJson {

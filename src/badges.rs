@@ -113,6 +113,12 @@ pub fn badge_for_license(owner: &str, repo: &str) -> Badge {
 }
 
 pub fn badge_for_license_text(license: &str, repository: Option<&str>) -> Badge {
+    let link_url = if is_dual_license_expression(license) {
+        None
+    } else {
+        repository.map(str::to_string)
+    };
+
     Badge {
         kind: BadgeKind::License,
         label: "license".to_string(),
@@ -120,7 +126,7 @@ pub fn badge_for_license_text(license: &str, repository: Option<&str>) -> Badge 
             "https://img.shields.io/badge/license-{}-blue.svg",
             encode_static_badge_segment(license)
         ),
-        link_url: repository.map(str::to_string),
+        link_url,
     }
 }
 
@@ -175,6 +181,10 @@ fn encode_static_badge_segment(value: &str) -> String {
     encoded
 }
 
+fn is_dual_license_expression(license: &str) -> bool {
+    license.contains(" OR ") || license.contains(" AND ") || license.contains('/')
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -203,10 +213,7 @@ mod tests {
             badge.image_url,
             "https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg"
         );
-        assert_eq!(
-            badge.link_url.as_deref(),
-            Some("https://github.com/f4ah6o/shuttle-rs")
-        );
+        assert_eq!(badge.link_url.as_deref(), None);
     }
 
     #[test]

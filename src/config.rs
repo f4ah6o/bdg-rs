@@ -5,6 +5,8 @@ use std::path::Path;
 pub struct Config {
     #[serde(default)]
     pub version: VersionConfig,
+    #[serde(default)]
+    pub badges: BadgesConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -25,6 +27,12 @@ impl Default for VersionConfig {
             year_max: default_year_max(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct BadgesConfig {
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 pub fn load_config(current_dir: &Path, git_root: &Path) -> anyhow::Result<Config> {

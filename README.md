@@ -60,6 +60,9 @@ bdg searches from current directory up to git root and uses the first config fou
 allow_yy_calver = false
 year_min = 2000
 year_max = 2199
+
+[badges]
+exclude = ["release", "coverage"]
 ```
 
 ## Agent Skills
@@ -73,7 +76,6 @@ Use `--allow-yy-calver` to opt in to YY.MM/YY.MM.MICRO calver patterns.
 - 0: no change or success
 - 2: changes detected in dry-run
 - 1: error
-
 
 
 
