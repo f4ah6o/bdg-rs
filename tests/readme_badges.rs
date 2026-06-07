@@ -60,6 +60,10 @@ fn parses_release_kind() {
     let badge = parse_badge_line(line);
     assert_eq!(badge.kind, "github_release");
     assert_eq!(badge.id, "release:github");
+    assert_eq!(
+        badge.meta.unwrap(),
+        serde_json::json!({ "owner": "OWNER", "repo": "REPO" })
+    );
 }
 
 #[test]
@@ -81,6 +85,22 @@ fn parses_coverage_kind() {
     let badge = parse_badge_line(line);
     assert_eq!(badge.kind, "coverage");
     assert_eq!(badge.id, "coverage:codecov");
+    assert_eq!(
+        badge.meta.unwrap(),
+        serde_json::json!({ "owner": "OWNER", "repo": "REPO" })
+    );
+}
+
+#[test]
+fn parses_docs_rs_badge() {
+    let line = "[![docs.rs](https://docs.rs/bdg/badge.svg)](https://docs.rs/bdg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "docs");
+    assert_eq!(badge.id, "docs:docsrs:bdg");
+    assert_eq!(
+        badge.meta.unwrap(),
+        serde_json::json!({ "crate": "bdg", "provider": "docs.rs" })
+    );
 }
 
 #[test]
@@ -101,7 +121,7 @@ fn non_http_url_is_unknown() {
 
 #[test]
 fn ignores_badges_in_code_fence() {
-    let lines = vec![
+    let lines = [
         "```md",
         "![crate](https://img.shields.io/crates/v/foo.svg)",
         "```",

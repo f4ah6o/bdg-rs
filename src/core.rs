@@ -186,7 +186,7 @@ fn git_default_branch(root: &Path) -> anyhow::Result<String> {
         anyhow::bail!("default branch not found");
     }
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let branch = text.split('/').last().unwrap_or("").to_string();
+    let branch = text.split('/').next_back().unwrap_or("").to_string();
     if branch.is_empty() {
         anyhow::bail!("default branch empty");
     }

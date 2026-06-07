@@ -94,7 +94,7 @@ where
 }
 
 pub fn help() -> &'static str {
-    "Interactive Badge Manager CLI\n\nUsage:\n  bdg <COMMAND> [OPTIONS]\n\nCommands:\n  add       Add badges to the managed README block\n  list      List managed badges\n  remove    Remove managed badges\n  skills    Print the bundled bdg Agent Skill\n\nGlobal options:\n  -h, --help       Print help\n  -V, --version    Print version\n\nAdd options:\n      --yes\n      --only <TYPES>\n      --allow-yy-calver\n      --dry-run\n      --json\n\nList options:\n      --json\n      --quiet\n      --allow-yy-calver\n\nRemove options:\n      --all\n      --id <ID>\n      --kind <KIND>\n      --strict\n      --quiet\n      --dry-run\n      --json\n      --allow-yy-calver\n"
+    "Interactive Badge Manager CLI\n\nUsage:\n  bdg <COMMAND> [OPTIONS]\n\nCommands:\n  add       Add badges to the managed README block\n  list      List managed badges\n  remove    Remove managed badges\n  skills    Print the bundled bdg Agent Skill\n\nGlobal options:\n  -h, --help       Print help\n  -V, --version    Print version\n\nAdd options:\n      --yes\n      --only <TYPES>      Comma-separated: ci,version,license,release,docs,downloads,coverage\n      --allow-yy-calver\n      --dry-run\n      --json\n\nList options:\n      --json\n      --quiet\n      --allow-yy-calver\n\nRemove options:\n      --all\n      --id <ID>\n      --kind <KIND>\n      --strict\n      --quiet\n      --dry-run\n      --json\n      --allow-yy-calver\n"
 }
 
 fn take_bool(args: &mut Vec<String>, name: &str) -> Result<bool, String> {

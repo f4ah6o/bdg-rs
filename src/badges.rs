@@ -6,6 +6,7 @@ pub enum BadgeKind {
     Release,
     Docs,
     Downloads,
+    Coverage,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +41,42 @@ pub fn badge_for_crates(crate_name: &str) -> Badge {
         label: "crates.io".to_string(),
         image_url: format!("https://img.shields.io/crates/v/{}.svg", crate_name),
         link_url: Some(format!("https://crates.io/crates/{}", crate_name)),
+    }
+}
+
+pub fn badge_for_npm_downloads(package: &str) -> Badge {
+    Badge {
+        kind: BadgeKind::Downloads,
+        label: "npm downloads".to_string(),
+        image_url: format!("https://img.shields.io/npm/dt/{}.svg", package),
+        link_url: Some(format!("https://www.npmjs.com/package/{}", package)),
+    }
+}
+
+pub fn badge_for_crates_downloads(crate_name: &str) -> Badge {
+    Badge {
+        kind: BadgeKind::Downloads,
+        label: "crates.io downloads".to_string(),
+        image_url: format!("https://img.shields.io/crates/d/{}.svg", crate_name),
+        link_url: Some(format!("https://crates.io/crates/{}", crate_name)),
+    }
+}
+
+pub fn badge_for_docs_rs(crate_name: &str) -> Badge {
+    Badge {
+        kind: BadgeKind::Docs,
+        label: "docs.rs".to_string(),
+        image_url: format!("https://docs.rs/{}/badge.svg", crate_name),
+        link_url: Some(format!("https://docs.rs/{}", crate_name)),
+    }
+}
+
+pub fn badge_for_docs_url(url: &str) -> Badge {
+    Badge {
+        kind: BadgeKind::Docs,
+        label: "docs".to_string(),
+        image_url: "https://img.shields.io/badge/docs-online-blue.svg".to_string(),
+        link_url: Some(url.to_string()),
     }
 }
 
@@ -87,6 +124,30 @@ pub fn badge_for_license_text(license: &str, repository: Option<&str>) -> Badge 
     }
 }
 
+pub fn badge_for_github_release(owner: &str, repo: &str) -> Badge {
+    Badge {
+        kind: BadgeKind::Release,
+        label: "release".to_string(),
+        image_url: format!(
+            "https://img.shields.io/github/v/release/{}/{}.svg",
+            owner, repo
+        ),
+        link_url: Some(format!("https://github.com/{}/{}/releases", owner, repo)),
+    }
+}
+
+pub fn badge_for_codecov(owner: &str, repo: &str) -> Badge {
+    Badge {
+        kind: BadgeKind::Coverage,
+        label: "codecov".to_string(),
+        image_url: format!(
+            "https://img.shields.io/codecov/c/github/{}/{}.svg",
+            owner, repo
+        ),
+        link_url: Some(format!("https://codecov.io/gh/{}/{}", owner, repo)),
+    }
+}
+
 pub fn badge_for_workflow(owner: &str, repo: &str, workflow_file: &str) -> Badge {
     Badge {
         kind: BadgeKind::Ci,
@@ -116,7 +177,11 @@ fn encode_static_badge_segment(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{badge_for_license_text, encode_static_badge_segment};
+    use super::{
+        badge_for_codecov, badge_for_crates_downloads, badge_for_docs_rs, badge_for_docs_url,
+        badge_for_github_release, badge_for_license_text, badge_for_npm_downloads,
+        encode_static_badge_segment,
+    };
 
     #[test]
     fn static_badge_segment_escapes_shields_separator() {
@@ -141,6 +206,34 @@ mod tests {
         assert_eq!(
             badge.link_url.as_deref(),
             Some("https://github.com/f4ah6o/shuttle-rs")
+        );
+    }
+
+    #[test]
+    fn practical_badges_render_expected_markdown() {
+        assert_eq!(
+            badge_for_npm_downloads("@scope/pkg").render_markdown(),
+            "[![npm downloads](https://img.shields.io/npm/dt/@scope/pkg.svg)](https://www.npmjs.com/package/@scope/pkg)"
+        );
+        assert_eq!(
+            badge_for_crates_downloads("bdg").render_markdown(),
+            "[![crates.io downloads](https://img.shields.io/crates/d/bdg.svg)](https://crates.io/crates/bdg)"
+        );
+        assert_eq!(
+            badge_for_docs_rs("bdg").render_markdown(),
+            "[![docs.rs](https://docs.rs/bdg/badge.svg)](https://docs.rs/bdg)"
+        );
+        assert_eq!(
+            badge_for_docs_url("https://example.com/docs").render_markdown(),
+            "[![docs](https://img.shields.io/badge/docs-online-blue.svg)](https://example.com/docs)"
+        );
+        assert_eq!(
+            badge_for_github_release("f4ah6o", "bdg-rs").render_markdown(),
+            "[![release](https://img.shields.io/github/v/release/f4ah6o/bdg-rs.svg)](https://github.com/f4ah6o/bdg-rs/releases)"
+        );
+        assert_eq!(
+            badge_for_codecov("f4ah6o", "bdg-rs").render_markdown(),
+            "[![codecov](https://img.shields.io/codecov/c/github/f4ah6o/bdg-rs.svg)](https://codecov.io/gh/f4ah6o/bdg-rs)"
         );
     }
 }

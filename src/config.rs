@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::path::Path;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub version: VersionConfig,
@@ -15,14 +15,6 @@ pub struct VersionConfig {
     pub year_min: i32,
     #[serde(default = "default_year_max")]
     pub year_max: i32,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            version: VersionConfig::default(),
-        }
-    }
 }
 
 impl Default for VersionConfig {
