@@ -1,6 +1,6 @@
 use crate::badges::{
-    Badge, badge_for_crates, badge_for_license, badge_for_moonbit, badge_for_npm,
-    badge_for_workflow,
+    Badge, badge_for_crates, badge_for_license, badge_for_license_text, badge_for_moonbit,
+    badge_for_npm, badge_for_workflow,
 };
 use crate::config::{Config, load_config};
 use crate::core::{Ecosystem, ProjectContext, build_context};
@@ -128,8 +128,20 @@ pub fn cmd_add(
             }
         }
     }
-    if let (Some(owner), Some(repo)) = (owner.as_deref(), repo.as_deref()) {
+    if let Some(license) = metadata
+        .license
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        candidates.push(badge_for_license_text(
+            license,
+            metadata.repository.as_deref(),
+        ));
+    } else if let (Some(owner), Some(repo)) = (owner.as_deref(), repo.as_deref()) {
         candidates.push(badge_for_license(owner, repo));
+    }
+    if let (Some(owner), Some(repo)) = (owner.as_deref(), repo.as_deref()) {
         for workflow in workflows {
             candidates.push(badge_for_workflow(owner, repo, &workflow.file));
         }

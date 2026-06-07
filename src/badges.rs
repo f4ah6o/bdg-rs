@@ -75,6 +75,18 @@ pub fn badge_for_license(owner: &str, repo: &str) -> Badge {
     }
 }
 
+pub fn badge_for_license_text(license: &str, repository: Option<&str>) -> Badge {
+    Badge {
+        kind: BadgeKind::License,
+        label: "license".to_string(),
+        image_url: format!(
+            "https://img.shields.io/badge/license-{}-blue.svg",
+            encode_static_badge_segment(license)
+        ),
+        link_url: repository.map(str::to_string),
+    }
+}
+
 pub fn badge_for_workflow(owner: &str, repo: &str, workflow_file: &str) -> Badge {
     Badge {
         kind: BadgeKind::Ci,
@@ -87,5 +99,48 @@ pub fn badge_for_workflow(owner: &str, repo: &str, workflow_file: &str) -> Badge
             "https://github.com/{}/{}/actions/workflows/{}",
             owner, repo, workflow_file
         )),
+    }
+}
+
+fn encode_static_badge_segment(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' | b'.' => encoded.push(byte as char),
+            b'-' => encoded.push_str("--"),
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{badge_for_license_text, encode_static_badge_segment};
+
+    #[test]
+    fn static_badge_segment_escapes_shields_separator() {
+        assert_eq!(encode_static_badge_segment("MIT"), "MIT");
+        assert_eq!(
+            encode_static_badge_segment("MIT OR Apache-2.0"),
+            "MIT%20OR%20Apache--2.0"
+        );
+    }
+
+    #[test]
+    fn license_text_badge_renders_static_shields_badge() {
+        let badge = badge_for_license_text(
+            "MIT OR Apache-2.0",
+            Some("https://github.com/f4ah6o/shuttle-rs"),
+        );
+
+        assert_eq!(
+            badge.image_url,
+            "https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg"
+        );
+        assert_eq!(
+            badge.link_url.as_deref(),
+            Some("https://github.com/f4ah6o/shuttle-rs")
+        );
     }
 }

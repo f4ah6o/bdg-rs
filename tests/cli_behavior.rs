@@ -1,6 +1,35 @@
 use std::process::Command;
 
 #[test]
+fn add_license_prefers_static_manifest_dual_license_badge() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        r#"
+[package]
+name = "bdg-dual-license-fixture"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/f4ah6o/shuttle-rs"
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["add", "--yes", "--only", "license", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg"));
+    assert!(!stdout.contains("img.shields.io/github/license"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn help_command_prints_usage() {
     let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
         .arg("--help")

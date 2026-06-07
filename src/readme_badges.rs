@@ -156,6 +156,13 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
     if image_trimmed.contains("img.shields.io/github/license/") {
         return ("license".to_string(), "license:github".to_string(), None);
     }
+    if let Some(license) = extract_static_license_badge(image_trimmed) {
+        return (
+            "license".to_string(),
+            "license:static".to_string(),
+            Some(serde_json::json!({ "license": license })),
+        );
+    }
     if image_trimmed.contains("img.shields.io/github/v/release/") {
         return (
             "github_release".to_string(),
@@ -184,6 +191,52 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
         format!("unknown:{}", hash_line(raw)),
         None,
     )
+}
+
+fn extract_static_license_badge(image: &str) -> Option<String> {
+    let prefix = "img.shields.io/badge/license-";
+    let pos = image.find(prefix)?;
+    let remainder = &image[pos + prefix.len()..];
+    let before_query = remainder.split('?').next().unwrap_or("");
+    let without_suffix = before_query
+        .strip_suffix(".svg")
+        .or_else(|| before_query.strip_suffix(".json"))
+        .unwrap_or(before_query);
+    let encoded = without_suffix
+        .strip_suffix("-blue")
+        .or_else(|| without_suffix.rsplit_once('-').map(|(message, _)| message))
+        .unwrap_or(without_suffix);
+    if encoded.is_empty() {
+        None
+    } else {
+        Some(decode_static_badge_segment(encoded))
+    }
+}
+
+fn decode_static_badge_segment(value: &str) -> String {
+    let mut decoded = String::new();
+    let bytes = value.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() {
+        if bytes[idx] == b'-' && bytes.get(idx + 1) == Some(&b'-') {
+            decoded.push('-');
+            idx += 2;
+        } else if bytes[idx] == b'%' && idx + 2 < bytes.len() {
+            if let Ok(hex) = std::str::from_utf8(&bytes[idx + 1..idx + 3]) {
+                if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                    decoded.push(byte as char);
+                    idx += 3;
+                    continue;
+                }
+            }
+            decoded.push(bytes[idx] as char);
+            idx += 1;
+        } else {
+            decoded.push(bytes[idx] as char);
+            idx += 1;
+        }
+    }
+    decoded
 }
 
 fn extract_after_prefix(image: &str, prefix: &str) -> Option<String> {

@@ -43,6 +43,18 @@ fn parses_license_kind() {
 }
 
 #[test]
+fn parses_static_dual_license_kind() {
+    let line = "![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "license");
+    assert_eq!(badge.id, "license:static");
+    assert_eq!(
+        badge.meta.unwrap(),
+        serde_json::json!({ "license": "MIT OR Apache-2.0" })
+    );
+}
+
+#[test]
 fn parses_release_kind() {
     let line = "![release](https://img.shields.io/github/v/release/OWNER/REPO.svg)";
     let badge = parse_badge_line(line);
