@@ -19,7 +19,7 @@ fn run() -> anyhow::Result<ExitCode> {
             return Ok(ExitCode::SUCCESS);
         }
         Ok(bdg::cli::ParseOutcome::Version) => {
-            println!("{}", env!("CARGO_PKG_VERSION"));
+            println!("{}", bdg::build_info::version_string());
             return Ok(ExitCode::SUCCESS);
         }
         Err(message) => {

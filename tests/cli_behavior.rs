@@ -266,7 +266,11 @@ fn version_command_prints_package_version() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        format!("{}\n", env!("CARGO_PKG_VERSION"))
+        format!(
+            "bdg {} ({})\n",
+            env!("CARGO_PKG_VERSION"),
+            bdg::build_info::RELEASE_COMMIT
+        )
     );
     assert!(output.stderr.is_empty());
 }

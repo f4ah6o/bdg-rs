@@ -31,6 +31,15 @@ It treats badges as managed project metadata rather than ad-hoc Markdown: projec
 cargo install bdg
 ```
 
+Release builds also expose their source commit:
+
+```bash
+bdg -V
+# bdg 2026.8.1 (a1b2c3d)
+```
+
+The registry version remains pure CalVer; the short Git SHA is embedded separately as build provenance by the release workflow.
+
 ## Recommended workflow
 
 Use `sync` when the README should reflect detected project metadata:

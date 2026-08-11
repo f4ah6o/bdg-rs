@@ -1,5 +1,6 @@
 pub mod app;
 pub mod badges;
+pub mod build_info;
 pub mod catalog;
 pub mod check;
 pub mod cli;
