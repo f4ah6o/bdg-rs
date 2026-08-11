@@ -77,6 +77,11 @@ fn parses_downloads_kinds() {
     let badge = parse_badge_line(line);
     assert_eq!(badge.kind, "crates_downloads");
     assert_eq!(badge.id, "crates_downloads:foo");
+
+    let line = "![dl](https://img.shields.io/github/downloads/OWNER/REPO/total.svg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "github_downloads");
+    assert_eq!(badge.id, "github_downloads:github");
 }
 
 #[test]
@@ -109,6 +114,48 @@ fn parses_docs_custom_badge() {
     let badge = parse_badge_line(line);
     assert_eq!(badge.kind, "docs");
     assert_eq!(badge.id, "docs:custom");
+}
+
+#[test]
+fn parses_msrv_and_github_repository_badges() {
+    let cases = [
+        (
+            "![MSRV](https://img.shields.io/crates/msrv/bdg.svg)",
+            "crates_msrv",
+            "crates_msrv:bdg",
+        ),
+        (
+            "![stars](https://img.shields.io/github/stars/OWNER/REPO.svg)",
+            "github_stars",
+            "stars:github",
+        ),
+        (
+            "![forks](https://img.shields.io/github/forks/OWNER/REPO.svg)",
+            "github_forks",
+            "forks:github",
+        ),
+        (
+            "![issues](https://img.shields.io/github/issues/OWNER/REPO.svg)",
+            "github_issues",
+            "issues:github",
+        ),
+        (
+            "![pulls](https://img.shields.io/github/issues-pr/OWNER/REPO.svg)",
+            "github_pull_requests",
+            "pulls:github",
+        ),
+        (
+            "![activity](https://img.shields.io/github/last-commit/OWNER/REPO.svg)",
+            "github_last_commit",
+            "activity:last_commit",
+        ),
+    ];
+
+    for (line, kind, id) in cases {
+        let badge = parse_badge_line(line);
+        assert_eq!(badge.kind, kind);
+        assert_eq!(badge.id, id);
+    }
 }
 
 #[test]

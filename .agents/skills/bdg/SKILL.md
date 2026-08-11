@@ -21,7 +21,36 @@ bdg sync
 - `bdg sync --check` plans the canonical detected badge set, does not write, and exits `2` when synchronization is needed.
 - `bdg sync` applies that plan and only changes the managed marker block.
 
-Use `bdg add` when a human should interactively choose a subset of candidates.
+Use `bdg add` when a human should interactively choose a broader subset of candidates.
+
+## Badge types
+
+Canonical `sync` candidates include:
+
+- `version`: npm, crates.io, MoonBit
+- `ci`: detected GitHub Actions workflows
+- `license`: manifest or GitHub license
+- `release`: GitHub release
+- `docs`: docs.rs or package documentation URL
+- `downloads`: npm or crates.io downloads
+- `coverage`: detected Codecov usage
+
+Additional supported candidates are deliberately opt-in for `sync`:
+
+- `msrv`: crates.io MSRV
+- `downloads`: total GitHub release downloads
+- `stars`: GitHub stars
+- `forks`: GitHub forks
+- `issues`: open GitHub issues
+- `pulls`: open GitHub pull requests
+- `activity`: GitHub last commit
+
+An unqualified `bdg sync` does not introduce these optional repository/community badges. Use interactive `bdg add`, `bdg add --yes`, or an explicit `sync --only` when they are wanted.
+
+```bash
+bdg sync --only msrv,stars,issues,activity
+bdg add --only downloads,stars,forks,pulls
+```
 
 ## Commands
 
@@ -32,6 +61,7 @@ Non-interactively reconciles the managed block from detected project metadata.
 ```bash
 bdg sync
 bdg sync --only ci,version,license,release,docs,downloads,coverage
+bdg sync --only msrv,stars,forks,issues,pulls,activity
 bdg sync --check
 bdg sync --dry-run
 bdg sync --json --check
@@ -41,7 +71,8 @@ Behavior:
 
 - detects project metadata from `Cargo.toml`, `package.json`, or `moon.mod.json`
 - detects GitHub Actions workflows from `.github/workflows`
-- generates version, CI, license, release, docs, downloads, and coverage candidates
+- generates supported badge candidates from project and repository metadata
+- keeps optional repository/community signals out of default `sync`
 - honors `.bdg.toml` badge exclusions unless `--only` is explicit
 - de-duplicates equivalent candidates
 - writes only inside `<!-- bdg:begin -->` / `<!-- bdg:end -->`
@@ -75,6 +106,7 @@ Interactive/manual candidate selection.
 bdg add
 bdg add --yes
 bdg add --only ci,version,license
+bdg add --only msrv,stars,forks,issues,pulls,activity
 bdg add --dry-run
 bdg add --json --dry-run
 ```

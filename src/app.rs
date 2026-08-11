@@ -1,6 +1,8 @@
 use crate::badges::{
-    Badge, badge_for_codecov, badge_for_crates, badge_for_crates_downloads, badge_for_docs_rs,
-    badge_for_docs_url, badge_for_github_release, badge_for_license, badge_for_license_text,
+    Badge, badge_for_codecov, badge_for_crates, badge_for_crates_downloads, badge_for_crates_msrv,
+    badge_for_docs_rs, badge_for_docs_url, badge_for_github_downloads, badge_for_github_forks,
+    badge_for_github_issues, badge_for_github_last_commit, badge_for_github_pull_requests,
+    badge_for_github_release, badge_for_github_stars, badge_for_license, badge_for_license_text,
     badge_for_moonbit, badge_for_npm, badge_for_npm_downloads, badge_for_workflow, dedupe_badges,
 };
 use crate::config::{Config, load_config};
@@ -22,8 +24,53 @@ use std::path::Path;
 
 const BDG_SKILL: &str = include_str!("../.agents/skills/bdg/SKILL.md");
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AddMode {
+    Add,
+    Sync,
+}
+
 pub fn cmd_add(
     current_dir: &Path,
+    yes: bool,
+    only: &[String],
+    allow_yy_calver: bool,
+    dry_run: bool,
+    json: bool,
+) -> anyhow::Result<i32> {
+    cmd_add_inner(
+        current_dir,
+        AddMode::Add,
+        yes,
+        only,
+        allow_yy_calver,
+        dry_run,
+        json,
+    )
+}
+
+pub fn cmd_sync(
+    current_dir: &Path,
+    only: &[String],
+    allow_yy_calver: bool,
+    dry_run: bool,
+    json: bool,
+) -> anyhow::Result<i32> {
+    cmd_add_inner(
+        current_dir,
+        AddMode::Sync,
+        true,
+        only,
+        allow_yy_calver,
+        dry_run,
+        json,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_add_inner(
+    current_dir: &Path,
+    mode: AddMode,
     yes: bool,
     only: &[String],
     allow_yy_calver: bool,
@@ -59,6 +106,7 @@ pub fn cmd_add(
     {
         candidates.push(badge_for_crates(&name));
         candidates.push(badge_for_crates_downloads(&name));
+        candidates.push(badge_for_crates_msrv(&name));
         candidates.push(badge_for_docs_rs(&name));
     }
     if let Some(path) = &context.manifests.moon_mod
@@ -88,6 +136,12 @@ pub fn cmd_add(
     }
     if let (Some(owner), Some(repo)) = (owner.as_deref(), repo.as_deref()) {
         candidates.push(badge_for_github_release(owner, repo));
+        candidates.push(badge_for_github_downloads(owner, repo));
+        candidates.push(badge_for_github_stars(owner, repo));
+        candidates.push(badge_for_github_forks(owner, repo));
+        candidates.push(badge_for_github_issues(owner, repo));
+        candidates.push(badge_for_github_pull_requests(owner, repo));
+        candidates.push(badge_for_github_last_commit(owner, repo));
         if detects_codecov(&context.root) {
             candidates.push(badge_for_codecov(owner, repo));
         }
@@ -96,7 +150,10 @@ pub fn cmd_add(
         }
     }
 
-    let filtered = filter_badges(dedupe_badges(candidates), only, &config);
+    let mut filtered = filter_badges(dedupe_badges(candidates), only, &config);
+    if mode == AddMode::Sync && only.is_empty() {
+        filtered.retain(|badge| badge.sync_default);
+    }
     let selected = if yes {
         filtered
     } else if !only.is_empty() {
@@ -387,8 +444,14 @@ fn format_badge_label(badge: &Badge, context: &ProjectContext, options: &Version
         crate::badges::BadgeKind::License => "license".to_string(),
         crate::badges::BadgeKind::Release => "release".to_string(),
         crate::badges::BadgeKind::Docs => "docs".to_string(),
-        crate::badges::BadgeKind::Downloads => "downloads".to_string(),
+        crate::badges::BadgeKind::Downloads => badge.label.clone(),
         crate::badges::BadgeKind::Coverage => "coverage".to_string(),
+        crate::badges::BadgeKind::Msrv => "MSRV".to_string(),
+        crate::badges::BadgeKind::Stars => "GitHub stars".to_string(),
+        crate::badges::BadgeKind::Forks => "GitHub forks".to_string(),
+        crate::badges::BadgeKind::Issues => "GitHub issues".to_string(),
+        crate::badges::BadgeKind::PullRequests => "GitHub pull requests".to_string(),
+        crate::badges::BadgeKind::Activity => "GitHub last commit".to_string(),
     }
 }
 

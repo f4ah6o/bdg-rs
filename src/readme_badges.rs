@@ -153,6 +153,13 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
             Some(serde_json::json!({ "crate": crate_name })),
         );
     }
+    if let Some(crate_name) = extract_after_prefix(image_trimmed, "img.shields.io/crates/msrv/") {
+        return (
+            "crates_msrv".to_string(),
+            format!("crates_msrv:{}", crate_name),
+            Some(serde_json::json!({ "crate": crate_name })),
+        );
+    }
     if let Some(crate_name) = extract_docs_rs_crate(image_trimmed) {
         return (
             "docs".to_string(),
@@ -174,6 +181,60 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
         return (
             "github_release".to_string(),
             "release:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "img.shields.io/github/downloads/")
+    {
+        return (
+            "github_downloads".to_string(),
+            "github_downloads:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "img.shields.io/github/stars/")
+    {
+        return (
+            "github_stars".to_string(),
+            "stars:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "img.shields.io/github/forks/")
+    {
+        return (
+            "github_forks".to_string(),
+            "forks:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "img.shields.io/github/issues-pr/")
+    {
+        return (
+            "github_pull_requests".to_string(),
+            "pulls:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "img.shields.io/github/issues/")
+    {
+        return (
+            "github_issues".to_string(),
+            "issues:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "img.shields.io/github/last-commit/")
+    {
+        return (
+            "github_last_commit".to_string(),
+            "activity:last_commit".to_string(),
             Some(serde_json::json!({ "owner": owner, "repo": repo })),
         );
     }

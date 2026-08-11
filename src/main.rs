@@ -62,14 +62,7 @@ fn run() -> anyhow::Result<ExitCode> {
             dry_run,
             check,
             json,
-        } => bdg::app::cmd_add(
-            &current_dir,
-            true,
-            &only,
-            allow_yy_calver,
-            dry_run || check,
-            json,
-        )?,
+        } => bdg::app::cmd_sync(&current_dir, &only, allow_yy_calver, dry_run || check, json)?,
         bdg::cli::Commands::Check { json, strict } => {
             bdg::check::cmd_check(&current_dir, json, strict)?
         }

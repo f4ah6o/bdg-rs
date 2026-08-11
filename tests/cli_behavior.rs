@@ -57,10 +57,81 @@ repository = "https://github.com/f4ah6o/bdg-rs"
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("img.shields.io/crates/v/bdg-practical-fixture.svg"));
     assert!(stdout.contains("img.shields.io/crates/d/bdg-practical-fixture.svg"));
+    assert!(stdout.contains("img.shields.io/crates/msrv/bdg-practical-fixture.svg"));
     assert!(stdout.contains("https://docs.rs/bdg-practical-fixture/badge.svg"));
     assert!(stdout.contains("img.shields.io/github/v/release/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/github/downloads/f4ah6o/bdg-rs/total.svg"));
+    assert!(stdout.contains("img.shields.io/github/stars/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/github/forks/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/github/issues/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/github/issues-pr/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/github/last-commit/f4ah6o/bdg-rs.svg"));
     assert!(stdout.contains("img.shields.io/codecov/c/github/f4ah6o/bdg-rs.svg"));
     assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn sync_default_does_not_add_optional_repository_badges() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        r#"
+[package]
+name = "bdg-sync-default-fixture"
+version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/f4ah6o/bdg-rs"
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["sync", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/crates/v/bdg-sync-default-fixture.svg"));
+    assert!(!stdout.contains("img.shields.io/crates/msrv/bdg-sync-default-fixture.svg"));
+    assert!(!stdout.contains("img.shields.io/github/stars/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/github/forks/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/github/issues/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/github/issues-pr/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/github/last-commit/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/github/downloads/f4ah6o/bdg-rs/total.svg"));
+}
+
+#[test]
+fn sync_only_can_select_optional_badges() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        r#"
+[package]
+name = "bdg-sync-optional-fixture"
+version = "0.1.0"
+repository = "https://github.com/f4ah6o/bdg-rs"
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["sync", "--only", "msrv,stars,issues,activity", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/crates/msrv/bdg-sync-optional-fixture.svg"));
+    assert!(stdout.contains("img.shields.io/github/stars/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/github/issues/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/github/last-commit/f4ah6o/bdg-rs.svg"));
+    assert!(!stdout.contains("img.shields.io/github/forks/f4ah6o/bdg-rs.svg"));
 }
 
 #[test]
@@ -181,6 +252,7 @@ fn help_command_prints_usage() {
     assert!(stdout.contains("Usage:"));
     assert!(stdout.contains("bdg <COMMAND> [OPTIONS]"));
     assert!(stdout.contains("remove"));
+    assert!(stdout.contains("msrv, stars, forks, issues, pulls, activity"));
     assert!(output.stderr.is_empty());
 }
 

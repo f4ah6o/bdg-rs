@@ -13,7 +13,7 @@ It treats badges as managed project metadata rather than ad-hoc Markdown: projec
 - Rust, Node, and MoonBit project detection
 - crates.io and npm registry metadata
 - GitHub Actions workflow discovery
-- version, CI, license, release, docs, downloads, and coverage badges
+- version, CI, license, release, docs, downloads, coverage, MSRV, and GitHub repository badges
 - deterministic non-interactive `sync` for local automation and CI
 - structural `check` with machine-readable JSON output
 - dry-run diffs with exit code `2` when changes are pending
@@ -57,6 +57,37 @@ bdg check --json
 
 `--strict` treats unrecognized lines inside the managed block as errors. Without it, they are warnings.
 
+## Supported badges
+
+`bdg` distinguishes canonical project metadata from optional repository/community signals so broad badge support does not make an ordinary `bdg sync` noisy.
+
+Canonical candidates can include:
+
+- `version`: npm, crates.io, MoonBit
+- `ci`: detected GitHub Actions workflows
+- `license`: manifest license or GitHub repository license
+- `release`: latest GitHub release
+- `docs`: docs.rs or detected package documentation URL
+- `downloads`: npm or crates.io downloads
+- `coverage`: Codecov when configuration or workflow usage is detected
+
+Additional supported candidates include:
+
+- `msrv`: crates.io MSRV
+- `downloads`: total GitHub release downloads
+- `stars`: GitHub stars
+- `forks`: GitHub forks
+- `issues`: open GitHub issues
+- `pulls`: open GitHub pull requests
+- `activity`: GitHub last commit
+
+These additional repository/community badges are available in interactive `bdg add`, in `bdg add --yes`, and through an explicit `sync --only`. They are intentionally not introduced by an unqualified `bdg sync`.
+
+```bash
+bdg sync --only msrv,stars,issues,activity
+bdg add --only downloads,stars,forks,pulls
+```
+
 ## Commands
 
 ### `bdg sync`
@@ -66,6 +97,7 @@ Reconciles the managed block non-interactively from detected project metadata.
 ```bash
 bdg sync
 bdg sync --only ci,version,license,release,docs,downloads,coverage
+bdg sync --only msrv,stars,forks,issues,pulls,activity
 bdg sync --check
 bdg sync --dry-run
 bdg sync --json --check
@@ -93,6 +125,7 @@ Interactive/manual badge selection. `--yes` makes it non-interactive; for canoni
 bdg add
 bdg add --yes
 bdg add --only ci,version,license
+bdg add --only msrv,stars,forks,issues,pulls,activity
 bdg add --dry-run
 ```
 
