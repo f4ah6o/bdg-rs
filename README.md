@@ -2,6 +2,7 @@
 <!-- bdg:begin -->
 [![crates.io](https://img.shields.io/crates/v/bdg.svg)](https://crates.io/crates/bdg)
 [![CI](https://github.com/f4ah6o/bdg-rs/actions/workflows/ci.yaml/badge.svg)](https://github.com/f4ah6o/bdg-rs/actions/workflows/ci.yaml)
+[![GitHub contributors](https://img.shields.io/github/contributors/f4ah6o/bdg-rs.svg)](https://github.com/f4ah6o/bdg-rs/graphs/contributors)
 <!-- bdg:end -->
 
 `bdg` is a focused CLI for discovering, validating, synchronizing, and removing README badges without rewriting unrelated documentation.
