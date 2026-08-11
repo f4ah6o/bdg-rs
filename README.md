@@ -18,6 +18,7 @@ It treats badges as managed project metadata rather than ad-hoc Markdown: projec
 - structural `check` with machine-readable JSON output
 - dry-run diffs with exit code `2` when changes are pending
 - targeted removal by stable badge id or kind
+- declarative badge catalogs from built-in definitions, local files, or HTTP(S) URLs
 - repository-aware config discovery
 - `-C/--directory` for scripting without changing shell state
 - optional TUI for interactive add/remove workflows
@@ -129,6 +130,42 @@ bdg add --only msrv,stars,forks,issues,pulls,activity
 bdg add --dry-run
 ```
 
+### `bdg catalog`
+
+Searches declarative badge definitions and adds them without recompiling `bdg`. The bundled catalog can be extended or overridden with project-local, file, or HTTP(S) sources.
+
+```bash
+bdg catalog search github
+bdg catalog search size --json
+bdg catalog add github-contributors
+bdg catalog add github-repo-size --dry-run
+bdg catalog add team-status --source ./team-catalog.toml
+bdg catalog add remote-status --source https://example.com/bdg-catalog.json
+bdg catalog add-url https://example.com/status.svg --label status --link https://example.com/status
+```
+
+Catalog sources may be TOML or JSON using schema `bdg.catalog/v1`. Definitions are templates and can use project placeholders: `{owner}`, `{repo}`, `{crate}`, `{package}`, `{module}`, and `{name}`. Missing values can be supplied explicitly with repeated `--set KEY=VALUE`.
+
+```toml
+schema = "bdg.catalog/v1"
+
+[[badge]]
+id = "website-status"
+kind = "status"
+label = "website"
+image = "https://img.shields.io/website?url={site}"
+link = "{site}"
+requires = ["site"]
+tags = ["website", "status"]
+description = "Website availability"
+```
+
+```bash
+bdg catalog add website-status --source ./catalog.toml --set site=https://example.com
+```
+
+For one-off badges, `catalog add-url` bypasses catalogs entirely. Arbitrary valid HTTP(S) image badges are treated as managed external badges, so custom services and Shields Endpoint badges remain compatible with `bdg check --strict`.
+
 ### `bdg list`
 
 Inspects the current managed badges plus detected repository, manifest, registry, and CI metadata.
@@ -181,7 +218,7 @@ All writes are constrained to one marker pair:
 <!-- bdg:end -->
 ```
 
-If the block is absent, `add`/`sync` insert it below the first H1 heading. `check` reports missing or duplicated markers instead of repairing them.
+If the block is absent, `add`, `sync`, and `catalog add` insert it below the first H1 heading. `check` reports missing or duplicated markers instead of repairing them.
 
 ## Configuration
 
@@ -195,9 +232,15 @@ year_max = 2199
 
 [badges]
 exclude = ["release", "coverage"]
+
+[catalog]
+sources = [
+  "./team-catalog.toml",
+  "https://example.com/bdg-catalog.json",
+]
 ```
 
-An explicit `--only` overrides configured badge exclusions for that invocation.
+An explicit `--only` overrides configured badge exclusions for that invocation. Catalog sources configured here are loaded automatically by `bdg catalog search` and `bdg catalog add`; explicit `--source` values are merged as additional sources. The project-local `.bdg/catalog.toml` file is also loaded automatically when present.
 
 ## TUI keys
 
