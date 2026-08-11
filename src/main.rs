@@ -94,6 +94,37 @@ fn run() -> anyhow::Result<ExitCode> {
             json,
             allow_yy_calver,
         )?,
+        bdg::cli::Commands::Catalog(command) => match command {
+            bdg::cli::CatalogCommand::Search {
+                query,
+                source,
+                json,
+            } => {
+                bdg::catalog::cmd_catalog_search(&current_dir, query.as_deref(), &source, json)?;
+                0
+            }
+            bdg::cli::CatalogCommand::Add {
+                ids,
+                source,
+                set,
+                dry_run,
+                json,
+            } => bdg::catalog::cmd_catalog_add(&current_dir, &ids, &source, &set, dry_run, json)?,
+            bdg::cli::CatalogCommand::AddUrl {
+                image,
+                label,
+                link,
+                dry_run,
+                json,
+            } => bdg::catalog::cmd_catalog_add_url(
+                &current_dir,
+                &image,
+                &label,
+                link.as_deref(),
+                dry_run,
+                json,
+            )?,
+        },
         bdg::cli::Commands::Skills => {
             bdg::app::cmd_skills()?;
             0

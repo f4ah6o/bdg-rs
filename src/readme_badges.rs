@@ -255,9 +255,9 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
         );
     }
     (
-        "unknown".to_string(),
-        format!("unknown:{}", hash_line(raw)),
-        None,
+        "external".to_string(),
+        format!("external:{}", hash_line(image_trimmed)),
+        Some(serde_json::json!({ "provider": "external" })),
     )
 }
 

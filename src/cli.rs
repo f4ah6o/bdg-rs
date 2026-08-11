@@ -46,7 +46,31 @@ pub enum Commands {
         json: bool,
         allow_yy_calver: bool,
     },
+    Catalog(CatalogCommand),
     Skills,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CatalogCommand {
+    Search {
+        query: Option<String>,
+        source: Vec<String>,
+        json: bool,
+    },
+    Add {
+        ids: Vec<String>,
+        source: Vec<String>,
+        set: Vec<String>,
+        dry_run: bool,
+        json: bool,
+    },
+    AddUrl {
+        image: String,
+        label: String,
+        link: Option<String>,
+        dry_run: bool,
+        json: bool,
+    },
 }
 
 pub fn parse_args<I, S>(args: I) -> Result<ParseOutcome, String>
@@ -114,6 +138,7 @@ where
             json: take_bool(&mut args, "--json")?,
             allow_yy_calver: take_bool(&mut args, "--allow-yy-calver")?,
         },
+        "catalog" => Commands::Catalog(parse_catalog_command(&mut args)?),
         "skills" => Commands::Skills,
         other => return Err(format!("unknown command `{other}`")),
     };
@@ -124,8 +149,71 @@ where
     Ok(ParseOutcome::Run(Cli { directory, command }))
 }
 
+fn parse_catalog_command(args: &mut Vec<String>) -> Result<CatalogCommand, String> {
+    if args.is_empty() {
+        return Err("catalog requires a subcommand: search or add".to_string());
+    }
+    let subcommand = args.remove(0);
+    match subcommand.as_str() {
+        "search" => {
+            let source = take_values(args, "--source")?;
+            let json = take_bool(args, "--json")?;
+            if args.len() > 1 {
+                return Err("catalog search accepts at most one QUERY".to_string());
+            }
+            let query = args.pop();
+            Ok(CatalogCommand::Search {
+                query,
+                source,
+                json,
+            })
+        }
+        "add" => {
+            let source = take_values(args, "--source")?;
+            let set = take_values(args, "--set")?;
+            let dry_run = take_bool(args, "--dry-run")?;
+            let json = take_bool(args, "--json")?;
+            if args.iter().any(|arg| arg.starts_with('-')) {
+                return Err(format!(
+                    "unexpected argument `{}`",
+                    args.iter().find(|arg| arg.starts_with('-')).unwrap()
+                ));
+            }
+            let ids = std::mem::take(args)
+                .into_iter()
+                .flat_map(|value| split_csv(&value))
+                .collect();
+            Ok(CatalogCommand::Add {
+                ids,
+                source,
+                set,
+                dry_run,
+                json,
+            })
+        }
+        "add-url" => {
+            let label =
+                take_single_value(args, &["--label"])?.unwrap_or_else(|| "badge".to_string());
+            let link = take_single_value(args, &["--link"])?;
+            let dry_run = take_bool(args, "--dry-run")?;
+            let json = take_bool(args, "--json")?;
+            if args.len() != 1 {
+                return Err("catalog add-url requires exactly one IMAGE_URL".to_string());
+            }
+            Ok(CatalogCommand::AddUrl {
+                image: args.remove(0),
+                label,
+                link,
+                dry_run,
+                json,
+            })
+        }
+        other => Err(format!("unknown catalog subcommand `{other}`")),
+    }
+}
+
 pub fn help() -> &'static str {
-    "Badge management for project READMEs\n\nUsage:\n  bdg <COMMAND> [OPTIONS]\n  bdg [GLOBAL OPTIONS] <COMMAND> [OPTIONS]\n\nCommands:\n  sync      Reconcile the managed badge block non-interactively\n  check     Validate marker structure and managed badge syntax\n  add       Add badges to the managed README block\n  list      Inspect project metadata and managed badges\n  remove    Remove managed badges\n  skills    Print the bundled bdg Agent Skill\n\nGlobal options:\n  -C, --directory <PATH>  Run as if bdg started in PATH\n  -h, --help              Print help\n  -V, --version           Print version\n\nBadge types:\n  ci, version, license, release, docs, downloads, coverage,\n  msrv, stars, forks, issues, pulls, activity\n\nSync options:\n      --only <TYPES>      Comma-separated badge types\n      --allow-yy-calver\n      --dry-run           Print planned changes without writing\n      --check             Exit 2 when the README is not synchronized\n      --json\n\nCheck options:\n      --strict            Treat unknown managed lines as errors\n      --json\n\nAdd options:\n      --yes\n      --only <TYPES>      Comma-separated badge types\n      --allow-yy-calver\n      --dry-run\n      --json\n\nList options:\n      --json\n      --quiet\n      --allow-yy-calver\n\nRemove options:\n      --all\n      --id <ID>\n      --kind <KIND>\n      --strict\n      --quiet\n      --dry-run\n      --json\n      --allow-yy-calver\n\nExit codes:\n  0  success / synchronized\n  1  runtime or validation error\n  2  usage error or changes detected by --dry-run/--check\n"
+    "Badge management for project READMEs\n\nUsage:\n  bdg <COMMAND> [OPTIONS]\n  bdg [GLOBAL OPTIONS] <COMMAND> [OPTIONS]\n\nCommands:\n  sync      Reconcile the managed badge block non-interactively\n  check     Validate marker structure and managed badge syntax\n  add       Add built-in badges to the managed README block\n  catalog   Search and add declarative badges from built-in/external catalogs\n  list      Inspect project metadata and managed badges\n  remove    Remove managed badges\n  skills    Print the bundled bdg Agent Skill\n\nGlobal options:\n  -C, --directory <PATH>  Run as if bdg started in PATH\n  -h, --help              Print help\n  -V, --version           Print version\n\nBadge types:\n  ci, version, license, release, docs, downloads, coverage,\n  msrv, stars, forks, issues, pulls, activity\n\nCatalog:\n  bdg catalog search [QUERY] [--source <PATH|URL>] [--json]\n  bdg catalog add <ID>... [--source <PATH|URL>] [--set KEY=VALUE] [--dry-run] [--json]\n  bdg catalog add-url <IMAGE_URL> [--label <TEXT>] [--link <URL>] [--dry-run] [--json]\n\n  Sources may be TOML or JSON using schema bdg.catalog/v1.\n  Project placeholders: {owner}, {repo}, {crate}, {package}, {module}, {name}.\n\nSync options:\n      --only <TYPES>      Comma-separated badge types\n      --allow-yy-calver\n      --dry-run           Print planned changes without writing\n      --check             Exit 2 when the README is not synchronized\n      --json\n\nCheck options:\n      --strict            Treat unknown managed lines as errors\n      --json\n\nAdd options:\n      --yes\n      --only <TYPES>      Comma-separated badge types\n      --allow-yy-calver\n      --dry-run\n      --json\n\nList options:\n      --json\n      --quiet\n      --allow-yy-calver\n\nRemove options:\n      --all\n      --id <ID>\n      --kind <KIND>\n      --strict\n      --quiet\n      --dry-run\n      --json\n      --allow-yy-calver\n\nExit codes:\n  0  success / synchronized\n  1  runtime or validation error\n  2  usage error or changes detected by --dry-run/--check\n"
 }
 
 fn take_bool(args: &mut Vec<String>, name: &str) -> Result<bool, String> {
@@ -190,7 +278,7 @@ fn split_csv(value: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Commands, ParseOutcome, parse_args};
+    use super::{CatalogCommand, Commands, ParseOutcome, parse_args};
 
     #[test]
     fn parses_add_flags_and_comma_only() {
@@ -207,6 +295,78 @@ mod tests {
                     dry_run: false,
                     json: true,
                 }
+            })
+        );
+    }
+
+    #[test]
+    fn parses_catalog_commands() {
+        assert_eq!(
+            parse_args([
+                "catalog",
+                "search",
+                "github",
+                "--source",
+                "extra.toml",
+                "--json"
+            ])
+            .unwrap(),
+            ParseOutcome::Run(super::Cli {
+                directory: None,
+                command: Commands::Catalog(CatalogCommand::Search {
+                    query: Some("github".to_string()),
+                    source: vec!["extra.toml".to_string()],
+                    json: true,
+                }),
+            })
+        );
+        assert_eq!(
+            parse_args([
+                "catalog",
+                "add",
+                "custom",
+                "github-discussions,github-contributors",
+                "--set",
+                "value=ok",
+                "--dry-run"
+            ])
+            .unwrap(),
+            ParseOutcome::Run(super::Cli {
+                directory: None,
+                command: Commands::Catalog(CatalogCommand::Add {
+                    ids: vec![
+                        "custom".to_string(),
+                        "github-discussions".to_string(),
+                        "github-contributors".to_string()
+                    ],
+                    source: Vec::new(),
+                    set: vec!["value=ok".to_string()],
+                    dry_run: true,
+                    json: false,
+                }),
+            })
+        );
+        assert_eq!(
+            parse_args([
+                "catalog",
+                "add-url",
+                "https://example.com/status.svg",
+                "--label",
+                "status",
+                "--link",
+                "https://example.com",
+                "--dry-run"
+            ])
+            .unwrap(),
+            ParseOutcome::Run(super::Cli {
+                directory: None,
+                command: Commands::Catalog(CatalogCommand::AddUrl {
+                    image: "https://example.com/status.svg".to_string(),
+                    label: "status".to_string(),
+                    link: Some("https://example.com".to_string()),
+                    dry_run: true,
+                    json: false,
+                }),
             })
         );
     }
@@ -309,6 +469,11 @@ mod tests {
             parse_args(["add", "--unknown"])
                 .unwrap_err()
                 .contains("unexpected argument")
+        );
+        assert!(
+            parse_args(["catalog", "nope"])
+                .unwrap_err()
+                .contains("unknown catalog subcommand")
         );
     }
 

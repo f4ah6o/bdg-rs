@@ -7,6 +7,8 @@ pub struct Config {
     pub version: VersionConfig,
     #[serde(default)]
     pub badges: BadgesConfig,
+    #[serde(default)]
+    pub catalog: CatalogConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -33,6 +35,12 @@ impl Default for VersionConfig {
 pub struct BadgesConfig {
     #[serde(default)]
     pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CatalogConfig {
+    #[serde(default)]
+    pub sources: Vec<String>,
 }
 
 pub fn load_config(current_dir: &Path, git_root: &Path) -> anyhow::Result<Config> {

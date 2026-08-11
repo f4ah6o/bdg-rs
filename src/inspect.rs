@@ -29,6 +29,7 @@ pub(crate) struct ListJson {
 struct ConfigJson {
     version: ConfigVersionJson,
     badges: ConfigBadgesJson,
+    catalog: ConfigCatalogJson,
 }
 
 #[derive(Debug, Serialize)]
@@ -41,6 +42,11 @@ struct ConfigVersionJson {
 #[derive(Debug, Serialize)]
 struct ConfigBadgesJson {
     exclude: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigCatalogJson {
+    sources: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -174,6 +180,9 @@ pub(crate) fn build_list_json(
         },
         badges: ConfigBadgesJson {
             exclude: cfg.badges.exclude.clone(),
+        },
+        catalog: ConfigCatalogJson {
+            sources: cfg.catalog.sources.clone(),
         },
     });
     Ok(ListJson {

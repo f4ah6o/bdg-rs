@@ -192,6 +192,14 @@ fn unknown_for_weird_markdown() {
 }
 
 #[test]
+fn arbitrary_http_badge_is_supported_as_external() {
+    let line = "![x](https://example.com/thing.svg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "external");
+    assert!(badge.id.starts_with("external:"));
+}
+
+#[test]
 fn id_is_stable() {
     let line = "![x](https://example.com/thing.svg)";
     let first = parse_badge_line(line).id;

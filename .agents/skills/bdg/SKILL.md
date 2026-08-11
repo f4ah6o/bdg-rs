@@ -21,7 +21,7 @@ bdg sync
 - `bdg sync --check` plans the canonical detected badge set, does not write, and exits `2` when synchronization is needed.
 - `bdg sync` applies that plan and only changes the managed marker block.
 
-Use `bdg add` when a human should interactively choose a broader subset of candidates.
+Use `bdg add` when a human should interactively choose a broader subset of built-in candidates. Use `bdg catalog` when the badge should come from a declarative local or remote catalog without recompiling `bdg`.
 
 ## Badge types
 
@@ -113,6 +113,28 @@ bdg add --json --dry-run
 
 For unattended canonical synchronization, use `bdg sync` instead of `bdg add --yes`.
 
+### `bdg catalog`
+
+Search and add declarative badges from the bundled catalog, `.bdg/catalog.toml`, configured sources, or explicit local/HTTP(S) sources.
+
+```bash
+bdg catalog search github
+bdg catalog search status --json
+bdg catalog add github-contributors
+bdg catalog add custom-status --source ./catalog.toml --set value=ok
+bdg catalog add remote-status --source https://example.com/catalog.json --dry-run
+bdg catalog add-url https://example.com/status.svg --label status --link https://example.com/status
+```
+
+Catalog schema is `bdg.catalog/v1` in TOML or JSON. Badge templates may use `{owner}`, `{repo}`, `{crate}`, `{package}`, `{module}`, and `{name}`; repeated `--set KEY=VALUE` supplies additional values. `catalog add-url` adds a one-off HTTP(S) badge without a catalog. Arbitrary HTTP(S) badge images are recognized as managed external badges.
+
+Persistent sources can be configured in `.bdg.toml`:
+
+```toml
+[catalog]
+sources = ["./team-catalog.toml", "https://example.com/catalog.json"]
+```
+
 ### `bdg list`
 
 Reads the actual README state and detected project context.
@@ -157,8 +179,8 @@ Config discovery starts from that requested directory and stops at its Git root.
 ## Constraints
 
 - Writes are limited to the bdg marker block.
-- `check`, `list`, and `skills` are read-only.
-- `sync --check` and all `--dry-run` operations are read-only.
+- `check`, `list`, `catalog search`, and `skills` are read-only.
+- `sync --check` and all `--dry-run` operations, including `catalog add --dry-run`, are read-only.
 - Prefer JSON output when another tool or agent will consume results.
 
 ## Project detection
