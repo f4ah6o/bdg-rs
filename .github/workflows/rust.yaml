@@ -24,15 +24,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify release source is main HEAD
+      - name: Verify release source belongs to main
         shell: bash
         run: |
           set -euo pipefail
           git fetch --force origin main
           source_sha=$(git rev-parse HEAD)
           main_sha=$(git rev-parse origin/main)
-          if [[ "$source_sha" != "$main_sha" ]]; then
-            echo "::error::The movable 'latest' tag must point at origin/main HEAD."
+          if ! git merge-base --is-ancestor "$source_sha" "$main_sha"; then
+            echo "::error::The movable 'latest' tag must point at a commit contained in origin/main."
             echo "latest: $source_sha"
             echo "main:   $main_sha"
             exit 1
@@ -47,8 +47,9 @@ jobs:
 
       - name: Allocate CalVer
         id: calver
-        uses: f4ah6o/calver-action@46520a3f74307b9d8948cef335925fba2734e65a
+        uses: f4ah6o/calver-action@30bf5153ad1c2fc5c3a110effe95e97bddf9f59e
         with:
+          format: YYYY.MM.PATCH
           timezone: Asia/Tokyo
           legacy_prefixes: v
           create_tag: false
@@ -115,14 +116,14 @@ jobs:
             cargo publish --locked
           fi
 
-      - name: Push immutable release tag and release commit
+      - name: Push immutable release tag
         shell: bash
         env:
           TAG: ${{ steps.calver.outputs.tag }}
         run: |
           set -euo pipefail
           git tag "$TAG" HEAD
-          git push --atomic origin HEAD:main "refs/tags/${TAG}"
+          git push origin "refs/tags/${TAG}"
 
       - name: Summary
         shell: bash
@@ -136,4 +137,6 @@ jobs:
             echo "- version: \`${VERSION}\`"
             echo "- tag: \`${TAG}\`"
             echo "- trigger: \`latest\`"
+            echo "- source: \`${GITHUB_SHA}\`"
+            echo "- main may contain newer commits; release commit is intentionally tag-only"
           } >> "$GITHUB_STEP_SUMMARY"
