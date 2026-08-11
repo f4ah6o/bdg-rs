@@ -1,9 +1,13 @@
 pub mod app;
 pub mod badges;
+pub mod check;
 pub mod cli;
 pub mod config;
 pub mod core;
+pub mod inspect;
 pub mod manifest;
+pub mod plan;
+pub mod project;
 pub mod providers;
 pub mod readme;
 pub mod readme_badges;

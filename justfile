@@ -1,7 +1,11 @@
-# Release new version (tag + push)
+# Local development and release tasks
 
-release-check:
-    cargo test --all --all-features
+check:
+    cargo fmt --check
+    cargo clippy --all-targets --all-features -- -D warnings
+    cargo test --all-targets
+
+release-check: check
     cargo build --release --all-features
     cargo publish --dry-run
 

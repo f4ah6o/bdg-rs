@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::time::Duration;
 
 const USER_AGENT: &str = concat!("bdg/", env!("CARGO_PKG_VERSION"));
 
@@ -63,7 +64,13 @@ fn parse_crates_metadata(text: &str) -> anyhow::Result<RegistryMetadata> {
 }
 
 fn fetch_json_text(url: &str) -> anyhow::Result<String> {
-    let mut response = ureq::get(url)
+    let config = ureq::Agent::config_builder()
+        .timeout_connect(Some(Duration::from_secs(3)))
+        .timeout_global(Some(Duration::from_secs(8)))
+        .build();
+    let agent = ureq::Agent::new_with_config(config);
+    let mut response = agent
+        .get(url)
         .header("User-Agent", USER_AGENT)
         .header("Accept", "application/json")
         .call()?;

@@ -45,6 +45,7 @@ repository = "https://github.com/f4ah6o/bdg-rs"
     )
     .unwrap();
     std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+    std::fs::write(temp.path().join(".codecov.yml"), "coverage: {}\n").unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
         .current_dir(temp.path())
@@ -123,6 +124,7 @@ exclude = ["coverage"]
     )
     .unwrap();
     std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+    std::fs::write(temp.path().join(".codecov.yml"), "coverage: {}\n").unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
         .current_dir(temp.path())
@@ -151,6 +153,7 @@ repository = "https://github.com/f4ah6o/bdg-rs"
     )
     .unwrap();
     std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+    std::fs::write(temp.path().join(".codecov.yml"), "coverage: {}\n").unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
         .current_dir(temp.path())

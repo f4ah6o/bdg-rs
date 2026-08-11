@@ -4,6 +4,32 @@ use std::path::{Path, PathBuf};
 pub const BDG_BEGIN: &str = "<!-- bdg:begin -->";
 pub const BDG_END: &str = "<!-- bdg:end -->";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MarkerState {
+    pub begin_count: usize,
+    pub end_count: usize,
+    pub ordered: bool,
+}
+
+impl MarkerState {
+    pub fn is_valid(self) -> bool {
+        self.begin_count == 1 && self.end_count == 1 && self.ordered
+    }
+}
+
+pub fn marker_state(content: &str) -> MarkerState {
+    let (newline, _) = detect_newline(content);
+    let lines = split_lines(content, newline);
+    let (begin_indices, end_indices) = collect_marker_indices(&lines);
+    MarkerState {
+        begin_count: begin_indices.len(),
+        end_count: end_indices.len(),
+        ordered: begin_indices.len() == 1
+            && end_indices.len() == 1
+            && begin_indices[0] < end_indices[0],
+    }
+}
+
 pub fn resolve_readme(root: &Path, prefer_moonbit: bool) -> PathBuf {
     let candidates = if prefer_moonbit {
         vec!["README.mbt.md", "README.md", "docs/README.md"]
@@ -20,7 +46,11 @@ pub fn resolve_readme(root: &Path, prefer_moonbit: bool) -> PathBuf {
 }
 
 pub fn ensure_marker_block(readme_path: &Path) -> anyhow::Result<String> {
-    let content = fs::read_to_string(readme_path).unwrap_or_default();
+    let content = match fs::read_to_string(readme_path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.into()),
+    };
     let (newline, has_trailing_newline) = detect_newline(&content);
     let lines = split_lines(&content, newline);
     let (begin_indices, end_indices) = collect_marker_indices(&lines);

@@ -7,6 +7,7 @@ pub enum ParseOutcome {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Cli {
+    pub directory: Option<String>,
     pub command: Commands,
 }
 
@@ -18,6 +19,17 @@ pub enum Commands {
         allow_yy_calver: bool,
         dry_run: bool,
         json: bool,
+    },
+    Sync {
+        only: Vec<String>,
+        allow_yy_calver: bool,
+        dry_run: bool,
+        check: bool,
+        json: bool,
+    },
+    Check {
+        json: bool,
+        strict: bool,
     },
     List {
         json: bool,
@@ -56,6 +68,11 @@ where
         return Ok(ParseOutcome::Version);
     }
 
+    let directory = take_single_value(&mut args, &["-C", "--directory"])?;
+    if args.is_empty() {
+        return Err("missing command".to_string());
+    }
+
     let command = args.remove(0);
     let command = match command.as_str() {
         "add" => Commands::Add {
@@ -67,6 +84,20 @@ where
             allow_yy_calver: take_bool(&mut args, "--allow-yy-calver")?,
             dry_run: take_bool(&mut args, "--dry-run")?,
             json: take_bool(&mut args, "--json")?,
+        },
+        "sync" => Commands::Sync {
+            only: take_values(&mut args, "--only")?
+                .into_iter()
+                .flat_map(|value| split_csv(&value))
+                .collect(),
+            allow_yy_calver: take_bool(&mut args, "--allow-yy-calver")?,
+            dry_run: take_bool(&mut args, "--dry-run")?,
+            check: take_bool(&mut args, "--check")?,
+            json: take_bool(&mut args, "--json")?,
+        },
+        "check" => Commands::Check {
+            json: take_bool(&mut args, "--json")?,
+            strict: take_bool(&mut args, "--strict")?,
         },
         "list" => Commands::List {
             json: take_bool(&mut args, "--json")?,
@@ -90,11 +121,11 @@ where
     if let Some(arg) = args.first() {
         return Err(format!("unexpected argument `{arg}`"));
     }
-    Ok(ParseOutcome::Run(Cli { command }))
+    Ok(ParseOutcome::Run(Cli { directory, command }))
 }
 
 pub fn help() -> &'static str {
-    "Interactive Badge Manager CLI\n\nUsage:\n  bdg <COMMAND> [OPTIONS]\n\nCommands:\n  add       Add badges to the managed README block\n  list      List managed badges\n  remove    Remove managed badges\n  skills    Print the bundled bdg Agent Skill\n\nGlobal options:\n  -h, --help       Print help\n  -V, --version    Print version\n\nAdd options:\n      --yes\n      --only <TYPES>      Comma-separated: ci,version,license,release,docs,downloads,coverage\n      --allow-yy-calver\n      --dry-run\n      --json\n\nList options:\n      --json\n      --quiet\n      --allow-yy-calver\n\nRemove options:\n      --all\n      --id <ID>\n      --kind <KIND>\n      --strict\n      --quiet\n      --dry-run\n      --json\n      --allow-yy-calver\n"
+    "Badge management for project READMEs\n\nUsage:\n  bdg <COMMAND> [OPTIONS]\n  bdg [GLOBAL OPTIONS] <COMMAND> [OPTIONS]\n\nCommands:\n  sync      Reconcile the managed badge block non-interactively\n  check     Validate marker structure and managed badge syntax\n  add       Add badges to the managed README block\n  list      Inspect project metadata and managed badges\n  remove    Remove managed badges\n  skills    Print the bundled bdg Agent Skill\n\nGlobal options:\n  -C, --directory <PATH>  Run as if bdg started in PATH\n  -h, --help              Print help\n  -V, --version           Print version\n\nSync options:\n      --only <TYPES>      Comma-separated: ci,version,license,release,docs,downloads,coverage\n      --allow-yy-calver\n      --dry-run           Print planned changes without writing\n      --check             Exit 2 when the README is not synchronized\n      --json\n\nCheck options:\n      --strict            Treat unknown managed lines as errors\n      --json\n\nAdd options:\n      --yes\n      --only <TYPES>      Comma-separated: ci,version,license,release,docs,downloads,coverage\n      --allow-yy-calver\n      --dry-run\n      --json\n\nList options:\n      --json\n      --quiet\n      --allow-yy-calver\n\nRemove options:\n      --all\n      --id <ID>\n      --kind <KIND>\n      --strict\n      --quiet\n      --dry-run\n      --json\n      --allow-yy-calver\n\nExit codes:\n  0  success / synchronized\n  1  runtime or validation error\n  2  usage error or changes detected by --dry-run/--check\n"
 }
 
 fn take_bool(args: &mut Vec<String>, name: &str) -> Result<bool, String> {
@@ -136,6 +167,18 @@ fn take_values(args: &mut Vec<String>, name: &str) -> Result<Vec<String>, String
     Ok(values)
 }
 
+fn take_single_value(args: &mut Vec<String>, names: &[&str]) -> Result<Option<String>, String> {
+    let mut values = Vec::new();
+    for name in names {
+        values.extend(take_values(args, name)?);
+    }
+    match values.len() {
+        0 => Ok(None),
+        1 => Ok(values.pop()),
+        _ => Err(format!("`{}` may only be specified once", names.join("/"))),
+    }
+}
+
 fn split_csv(value: &str) -> Vec<String> {
     value
         .split(',')
@@ -156,12 +199,49 @@ mod tests {
         assert_eq!(
             parsed,
             ParseOutcome::Run(super::Cli {
+                directory: None,
                 command: Commands::Add {
                     yes: true,
                     only: vec!["ci".to_string(), "version".to_string()],
                     allow_yy_calver: false,
                     dry_run: false,
                     json: true,
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn parses_sync_check_and_directory() {
+        let parsed = parse_args([
+            "-C",
+            "repo",
+            "sync",
+            "--only=ci,license",
+            "--check",
+            "--json",
+        ])
+        .expect("parse");
+        assert_eq!(
+            parsed,
+            ParseOutcome::Run(super::Cli {
+                directory: Some("repo".to_string()),
+                command: Commands::Sync {
+                    only: vec!["ci".to_string(), "license".to_string()],
+                    allow_yy_calver: false,
+                    dry_run: false,
+                    check: true,
+                    json: true,
+                }
+            })
+        );
+        assert_eq!(
+            parse_args(["check", "--strict"]).unwrap(),
+            ParseOutcome::Run(super::Cli {
+                directory: None,
+                command: Commands::Check {
+                    json: false,
+                    strict: true,
                 }
             })
         );
@@ -181,6 +261,7 @@ mod tests {
         assert_eq!(
             parsed,
             ParseOutcome::Run(super::Cli {
+                directory: None,
                 command: Commands::Remove {
                     all: false,
                     id: vec!["ci:rust.yaml".to_string(), "npm:bdg".to_string()],
@@ -201,6 +282,7 @@ mod tests {
         assert_eq!(
             parsed,
             ParseOutcome::Run(super::Cli {
+                directory: None,
                 command: Commands::List {
                     json: true,
                     quiet: true,

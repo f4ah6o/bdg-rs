@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BadgeKind {
     Version,
@@ -7,6 +9,20 @@ pub enum BadgeKind {
     Docs,
     Downloads,
     Coverage,
+}
+
+impl BadgeKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Version => "version",
+            Self::Ci => "ci",
+            Self::License => "license",
+            Self::Release => "release",
+            Self::Docs => "docs",
+            Self::Downloads => "downloads",
+            Self::Coverage => "coverage",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +40,14 @@ impl Badge {
             None => format!("![{}]({})", self.label, self.image_url),
         }
     }
+}
+
+pub fn dedupe_badges(badges: Vec<Badge>) -> Vec<Badge> {
+    let mut seen = HashSet::new();
+    badges
+        .into_iter()
+        .filter(|badge| seen.insert((badge.kind, badge.image_url.clone(), badge.link_url.clone())))
+        .collect()
 }
 
 pub fn badge_for_npm(package: &str) -> Badge {

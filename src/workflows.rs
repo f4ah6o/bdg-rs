@@ -36,6 +36,35 @@ pub fn detect_workflows(root: &Path) -> Vec<WorkflowInfo> {
     workflows
 }
 
+pub fn detects_codecov(root: &Path) -> bool {
+    if [
+        ".codecov.yml",
+        ".codecov.yaml",
+        "codecov.yml",
+        "codecov.yaml",
+    ]
+    .iter()
+    .any(|candidate| root.join(candidate).is_file())
+    {
+        return true;
+    }
+
+    let workflows_dir = root.join(".github").join("workflows");
+    let Ok(entries) = std::fs::read_dir(workflows_dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let path = entry.path();
+        let ext = path.extension().and_then(|value| value.to_str());
+        if !matches!(ext, Some("yml" | "yaml")) {
+            return false;
+        }
+        std::fs::read_to_string(path)
+            .map(|content| content.to_ascii_lowercase().contains("codecov"))
+            .unwrap_or(false)
+    })
+}
+
 pub fn gh_latest_status(workflow: &str) -> Option<(String, String)> {
     let view_output = std::process::Command::new("gh")
         .arg("workflow")
@@ -80,7 +109,15 @@ pub struct GhRunInfo {
 }
 
 pub fn gh_latest_status_json(workflow: &str) -> GhRunInfo {
-    let gh_check = std::process::Command::new("gh").arg("--version").output();
+    let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    gh_latest_status_json_in(&current_dir, workflow)
+}
+
+pub fn gh_latest_status_json_in(root: &Path, workflow: &str) -> GhRunInfo {
+    let gh_check = std::process::Command::new("gh")
+        .arg("--version")
+        .current_dir(root)
+        .output();
     if gh_check.is_err() {
         return GhRunInfo {
             ok: false,
@@ -100,6 +137,7 @@ pub fn gh_latest_status_json(workflow: &str) -> GhRunInfo {
         .arg("1")
         .arg("--json")
         .arg("conclusion,updatedAt,url,databaseId")
+        .current_dir(root)
         .output();
     let output = match output {
         Ok(output) => output,
@@ -155,4 +193,28 @@ struct GhRunPayload {
     #[serde(rename = "updatedAt")]
     updated_at: Option<String>,
     url: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::detects_codecov;
+
+    #[test]
+    fn detects_codecov_from_config_or_workflow() {
+        let temp = tempfile::tempdir().unwrap();
+        assert!(!detects_codecov(temp.path()));
+
+        std::fs::write(temp.path().join(".codecov.yml"), "coverage: {}\n").unwrap();
+        assert!(detects_codecov(temp.path()));
+        std::fs::remove_file(temp.path().join(".codecov.yml")).unwrap();
+
+        let workflows = temp.path().join(".github/workflows");
+        std::fs::create_dir_all(&workflows).unwrap();
+        std::fs::write(
+            workflows.join("ci.yml"),
+            "steps:\n  - uses: codecov/codecov-action@v5\n",
+        )
+        .unwrap();
+        assert!(detects_codecov(temp.path()));
+    }
 }

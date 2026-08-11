@@ -1,87 +1,144 @@
 ---
 name: bdg
-description: Use bdg to inspect and manage README badge blocks safely in Rust, Node, and MoonBit repositories.
+description: Use bdg to validate, synchronize, inspect, and remove README badges safely in Rust, Node, and MoonBit repositories.
 ---
 
 # bdg
 
-Use `bdg` when you need to inspect, add, or remove badges inside a README without touching unrelated content.
+Use `bdg` when README badges should be managed as project metadata instead of hand-edited Markdown.
 
-## When To Use
+## Preferred workflow
 
-- You need to add badges for crates.io, npm, MoonBit, license, GitHub Actions, releases, docs, downloads, or coverage.
-- You need to inspect the current managed badge block before changing it.
-- You need to remove badges by id, kind, or all at once while keeping edits constrained.
+For deterministic automation and CI, prefer:
 
-## Command Guide
+```bash
+bdg check
+bdg sync --check
+bdg sync
+```
+
+- `bdg check` validates the existing managed block without network-dependent discovery or writes.
+- `bdg sync --check` plans the canonical detected badge set, does not write, and exits `2` when synchronization is needed.
+- `bdg sync` applies that plan and only changes the managed marker block.
+
+Use `bdg add` when a human should interactively choose a subset of candidates.
+
+## Commands
+
+### `bdg sync`
+
+Non-interactively reconciles the managed block from detected project metadata.
+
+```bash
+bdg sync
+bdg sync --only ci,version,license,release,docs,downloads,coverage
+bdg sync --check
+bdg sync --dry-run
+bdg sync --json --check
+```
+
+Behavior:
+
+- detects project metadata from `Cargo.toml`, `package.json`, or `moon.mod.json`
+- detects GitHub Actions workflows from `.github/workflows`
+- generates version, CI, license, release, docs, downloads, and coverage candidates
+- honors `.bdg.toml` badge exclusions unless `--only` is explicit
+- de-duplicates equivalent candidates
+- writes only inside `<!-- bdg:begin -->` / `<!-- bdg:end -->`
+- inserts the marker block if it is absent
+- `--check` and `--dry-run` never write and exit `2` when a change is pending
+
+### `bdg check`
+
+Statically validates the existing managed block.
+
+```bash
+bdg check
+bdg check --strict
+bdg check --json
+```
+
+Checks include:
+
+- exactly one ordered marker pair
+- recognized badge Markdown inside the block
+- duplicate stable badge ids
+- strict handling of unknown managed lines with `--strict`
+
+JSON output uses schema `bdg.check/v1`.
 
 ### `bdg add`
 
-Adds badges to the managed block in the detected README.
+Interactive/manual candidate selection.
 
-- `bdg add`
-- `bdg add --yes`
-- `bdg add --only ci,version,license,release,docs,downloads,coverage`
-- `bdg add --dry-run`
-- `bdg add --json --dry-run`
+```bash
+bdg add
+bdg add --yes
+bdg add --only ci,version,license
+bdg add --dry-run
+bdg add --json --dry-run
+```
 
-Behavior:
-
-- Detects project metadata from `Cargo.toml`, `package.json`, or `moon.mod.json`.
-- Detects GitHub Actions workflows from `.github/workflows`.
-- Supports version, CI, license, release, docs, downloads, and coverage badge candidates.
-- Honors `.bdg.toml` `[badges] exclude = ["release", "coverage"]` for repositories that do not use those services.
-- Writes only inside the `<!-- bdg:begin -->` / `<!-- bdg:end -->` block.
-- Inserts the marker block if it does not exist yet.
+For unattended canonical synchronization, use `bdg sync` instead of `bdg add --yes`.
 
 ### `bdg list`
 
-Shows the current README badge state and detected project context.
+Reads the actual README state and detected project context.
 
-- `bdg list`
-- `bdg list --json`
-- `bdg list --quiet`
+```bash
+bdg list
+bdg list --json
+bdg list --quiet
+```
 
-Behavior:
-
-- Reports README path, marker status, badge count, and CI workflow status.
-- `--json` emits structured repository, manifest, registry, CI, and managed-block data.
+It reports repository, manifest, registry, CI, marker, and managed badge information. It is read-only and does not synthesize a missing marker block.
 
 ### `bdg remove`
 
-Removes badges from the managed block.
+Removes managed badges interactively or by stable id/kind.
 
-- `bdg remove`
-- `bdg remove --id ci:rust.yaml`
-- `bdg remove --kind github_actions`
-- `bdg remove --all`
-- `bdg remove --dry-run`
-- `bdg remove --json --dry-run`
-
-Behavior:
-
-- Interactive mode lets you choose which badges to remove.
-- `--id` and `--kind` target removals precisely.
-- `--all` removes the full managed block content.
-- `--dry-run` shows the diff without writing.
+```bash
+bdg remove
+bdg remove --id ci:rust.yaml
+bdg remove --kind github_actions
+bdg remove --all
+bdg remove --dry-run
+bdg remove --json --dry-run
+```
 
 ### `bdg skills`
 
 Prints this Agent Skills document to stdout.
 
-Use it when another agent or tool needs the current `bdg` usage context in a standards-aligned format.
+## Directory targeting
+
+All commands accept `-C/--directory` so automation does not need to mutate shell state:
+
+```bash
+bdg -C ../project check
+bdg --directory ../project sync --check
+bdg -C ../project list --json
+```
+
+Config discovery starts from that requested directory and stops at its Git root.
 
 ## Constraints
 
-- `bdg` only manages content inside its marker block.
-- `bdg` does not rewrite unrelated README sections.
-- `bdg add` and `bdg remove` may modify files; prefer `--dry-run` first when changes need review.
-- `bdg list` and `bdg skills` are read-only.
+- Writes are limited to the bdg marker block.
+- `check`, `list`, and `skills` are read-only.
+- `sync --check` and all `--dry-run` operations are read-only.
+- Prefer JSON output when another tool or agent will consume results.
 
-## Project Detection
+## Project detection
 
 - Rust: `Cargo.toml`
 - Node: `package.json`
 - MoonBit: `moon.mod.json`
 
-`bdg` chooses the closest matching manifest from the current directory within the repository and searches config from the current directory up to the git root.
+`bdg` chooses the closest matching manifest inside the repository and supports workspace/monorepo discovery.
+
+## Exit codes
+
+- `0`: success, valid state, or already synchronized
+- `1`: runtime or validation error
+- `2`: usage error or pending changes from `--dry-run` / `--check`

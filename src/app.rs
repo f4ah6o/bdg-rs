@@ -1,98 +1,26 @@
 use crate::badges::{
     Badge, badge_for_codecov, badge_for_crates, badge_for_crates_downloads, badge_for_docs_rs,
     badge_for_docs_url, badge_for_github_release, badge_for_license, badge_for_license_text,
-    badge_for_moonbit, badge_for_npm, badge_for_npm_downloads, badge_for_workflow,
+    badge_for_moonbit, badge_for_npm, badge_for_npm_downloads, badge_for_workflow, dedupe_badges,
 };
 use crate::config::{Config, load_config};
-use crate::core::{Ecosystem, ProjectContext, build_context};
-use crate::manifest::{
-    RepositoryField, read_moon_mod, read_package_json, read_resolved_cargo_package,
-};
-use crate::providers::{RegistryMetadata, fetch_crates_metadata, fetch_npm_metadata};
+use crate::core::{ProjectContext, build_context};
+use crate::inspect::build_list_json;
+use crate::manifest::{read_moon_mod, read_resolved_cargo_package};
+use crate::plan::ReadmePlan;
+use crate::project::{infer_owner_repo, local_npm_packages, resolve_metadata};
 use crate::readme::{
-    BDG_BEGIN, BDG_END, ensure_marker_block, extract_managed_block, readme_newline_info,
-    remove_marker_block, resolve_readme, rewrite_marker_block, rewrite_marker_block_lines,
-    write_readme_atomic,
+    ensure_marker_block, extract_managed_block, readme_newline_info, remove_marker_block,
+    resolve_readme, rewrite_marker_block, rewrite_marker_block_lines,
 };
-use crate::readme_badges::ParsedBadge;
 use crate::readme_remove::remove_block_lines_by_id_kind;
 use crate::version::VersionOptions;
-use crate::workflows::{WorkflowInfo, detect_workflows, gh_latest_status_json};
-use anyhow::Context;
+use crate::workflows::{detect_workflows, detects_codecov, gh_latest_status_json_in};
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::collections::HashSet;
+use std::path::Path;
 
 const BDG_SKILL: &str = include_str!("../.agents/skills/bdg/SKILL.md");
-
-#[derive(Debug, Clone, Default)]
-pub struct ResolvedMetadata {
-    pub name: Option<String>,
-    pub version: Option<String>,
-    pub license: Option<String>,
-    pub repository: Option<String>,
-    pub description: Option<String>,
-    pub registry: Option<RegistryMetadata>,
-}
-
-#[derive(Debug, Clone)]
-struct NpmPackage {
-    path: PathBuf,
-    name: String,
-    version: Option<String>,
-    license: Option<String>,
-    repository: Option<RepositoryField>,
-    description: Option<String>,
-    private: bool,
-    registry: RegistryMetadata,
-    published: bool,
-}
-
-fn local_npm_packages(context: &ProjectContext) -> Vec<NpmPackage> {
-    let mut seen = HashSet::new();
-    let mut packages = Vec::new();
-    for path in &context.manifests.package_json_all {
-        if !seen.insert(path.clone()) {
-            continue;
-        }
-        let Ok(pkg) = read_package_json(path) else {
-            continue;
-        };
-        if pkg.private.unwrap_or(false) {
-            continue;
-        }
-        let Some(name) = pkg.name.clone() else {
-            continue;
-        };
-        let registry = fetch_npm_metadata(&name).unwrap_or_else(|_| RegistryMetadata::empty());
-        let published = registry.version.is_some();
-        packages.push(NpmPackage {
-            path: path.clone(),
-            name,
-            version: pkg.version,
-            license: pkg.license,
-            repository: pkg.repository,
-            description: pkg.description,
-            private: false,
-            registry,
-            published,
-        });
-    }
-    packages.sort_by(|a, b| a.path.cmp(&b.path));
-    packages
-}
-
-fn select_representative_npm_package(
-    packages: &[NpmPackage],
-    repo_name: Option<&str>,
-) -> Option<NpmPackage> {
-    if let Some(repo_name) = repo_name
-        && let Some(package) = packages.iter().find(|package| package.name == repo_name)
-    {
-        return Some(package.clone());
-    }
-    packages.first().cloned()
-}
 
 pub fn cmd_add(
     current_dir: &Path,
@@ -103,7 +31,7 @@ pub fn cmd_add(
     json: bool,
 ) -> anyhow::Result<i32> {
     let context = build_context(current_dir)?;
-    let config = load_config_for_context(&context)?;
+    let config = load_config_for_context(current_dir, &context)?;
     let options = version_options(&context, Some((allow_yy_calver, &config)));
     let readme_path = resolve_readme(&context.root, context.has_moonbit());
     let npm_packages = local_npm_packages(&context);
@@ -160,13 +88,15 @@ pub fn cmd_add(
     }
     if let (Some(owner), Some(repo)) = (owner.as_deref(), repo.as_deref()) {
         candidates.push(badge_for_github_release(owner, repo));
-        candidates.push(badge_for_codecov(owner, repo));
+        if detects_codecov(&context.root) {
+            candidates.push(badge_for_codecov(owner, repo));
+        }
         for workflow in workflows {
             candidates.push(badge_for_workflow(owner, repo, &workflow.file));
         }
     }
 
-    let filtered = filter_badges(candidates, only, &config);
+    let filtered = filter_badges(dedupe_badges(candidates), only, &config);
     let selected = if yes {
         filtered
     } else if !only.is_empty() {
@@ -198,12 +128,13 @@ pub fn cmd_add(
     let markdown: Vec<String> = selected.into_iter().map(|b| b.render_markdown()).collect();
     let content = ensure_marker_block(&readme_path)?;
     let updated = rewrite_marker_block(&content, &markdown)?;
-    let diff = unified_diff(&readme_path, &content, &updated);
+    let plan = ReadmePlan::new(readme_path.clone(), content, updated);
+    let diff = plan.diff();
     if dry_run {
         if json {
             let payload = DryRunJson {
                 schema: "bdg.dryrun/v1".to_string(),
-                path: readme_path.to_string_lossy().to_string(),
+                path: plan.path().to_string_lossy().to_string(),
                 diff: diff.clone(),
                 removed_ids: None,
                 missing_ids: None,
@@ -217,7 +148,7 @@ pub fn cmd_add(
         }
         return Ok(if diff.is_empty() { 0 } else { 2 });
     }
-    write_readme_atomic(&readme_path, &updated)?;
+    plan.apply()?;
     Ok(0)
 }
 
@@ -228,10 +159,14 @@ pub fn cmd_list(
     allow_yy_calver: bool,
 ) -> anyhow::Result<()> {
     let context = build_context(current_dir)?;
-    let config = load_config_for_context(&context)?;
+    let config = load_config_for_context(current_dir, &context)?;
     let options = version_options(&context, Some((allow_yy_calver, &config)));
     let readme_path = resolve_readme(&context.root, context.has_moonbit());
-    let content = ensure_marker_block(&readme_path)?;
+    let content = if readme_path.exists() {
+        std::fs::read_to_string(&readme_path)?
+    } else {
+        String::new()
+    };
     let badges = extract_managed_block(&content);
     if json {
         let payload = build_list_json(
@@ -249,21 +184,25 @@ pub fn cmd_list(
 
     if !quiet {
         let (newline, trailing) = readme_newline_info(&content);
-        let marker_present = content.contains(BDG_BEGIN) && content.contains(BDG_END);
+        let marker = crate::readme::marker_state(&content);
+        let marker_label = if marker.is_valid() {
+            "present"
+        } else if marker.begin_count == 0 && marker.end_count == 0 {
+            "missing"
+        } else {
+            "invalid"
+        };
         println!(
             "README: {} ({}, trailing newline: {})",
             readme_path.to_string_lossy(),
             newline,
             if trailing { "yes" } else { "no" }
         );
-        println!(
-            "Marker block: {}",
-            if marker_present { "present" } else { "missing" }
-        );
+        println!("Marker block: {marker_label}");
         println!("Badges: {}", badges.len());
         let workflows = detect_workflows(&context.root);
         for wf in workflows {
-            let status = gh_latest_status_json(&wf.file);
+            let status = gh_latest_status_json_in(&context.root, &wf.file);
             if status.ok {
                 if let Some(conclusion) = status.conclusion {
                     println!("- CI {} last: {}", wf.file, conclusion);
@@ -339,7 +278,8 @@ pub fn cmd_remove(
     } else {
         rewrite_marker_block(&content, &remaining)?
     };
-    let diff = unified_diff(&readme_path, &content, &updated);
+    let plan = ReadmePlan::new(readme_path.clone(), content, updated);
+    let diff = plan.diff();
     if let Some(removal) = &removal_result
         && !json
         && !quiet
@@ -355,7 +295,7 @@ pub fn cmd_remove(
             let warnings = build_remove_warnings(removal_result.as_ref());
             let payload = DryRunJson {
                 schema: "bdg.dryrun/v1".to_string(),
-                path: readme_path.to_string_lossy().to_string(),
+                path: plan.path().to_string_lossy().to_string(),
                 diff: diff.clone(),
                 removed_ids: removal_result.as_ref().map(|r| r.removed_ids.clone()),
                 missing_ids: removal_result.as_ref().map(|r| r.missing_ids.clone()),
@@ -369,7 +309,7 @@ pub fn cmd_remove(
         }
         return Ok(if diff.is_empty() { 0 } else { 2 });
     }
-    write_readme_atomic(&readme_path, &updated)?;
+    plan.apply()?;
     Ok(0)
 }
 
@@ -405,33 +345,17 @@ fn filter_badges(badges: Vec<Badge>, only: &[String], config: &Config) -> Vec<Ba
             .collect();
         return badges
             .into_iter()
-            .filter(|badge| !excluded.contains(badge_kind_filter_name(badge.kind)))
+            .filter(|badge| !excluded.contains(badge.kind.as_str()))
             .collect();
     }
     let only_lower: HashSet<String> = only.iter().map(|s| s.trim().to_lowercase()).collect();
     badges
         .into_iter()
-        .filter(|badge| only_lower.contains(badge_kind_filter_name(badge.kind)))
+        .filter(|badge| only_lower.contains(badge.kind.as_str()))
         .collect()
 }
 
-fn badge_kind_filter_name(kind: crate::badges::BadgeKind) -> &'static str {
-    match kind {
-        crate::badges::BadgeKind::Ci => "ci",
-        crate::badges::BadgeKind::Version => "version",
-        crate::badges::BadgeKind::License => "license",
-        crate::badges::BadgeKind::Release => "release",
-        crate::badges::BadgeKind::Docs => "docs",
-        crate::badges::BadgeKind::Downloads => "downloads",
-        crate::badges::BadgeKind::Coverage => "coverage",
-    }
-}
-
-fn format_badge_label(
-    badge: &Badge,
-    _context: &ProjectContext,
-    options: &VersionOptions,
-) -> String {
+fn format_badge_label(badge: &Badge, context: &ProjectContext, options: &VersionOptions) -> String {
     match badge.kind {
         crate::badges::BadgeKind::Ci => {
             let workflow = badge
@@ -440,7 +364,7 @@ fn format_badge_label(
                 .nth(1)
                 .and_then(|rest| rest.split('/').next())
                 .unwrap_or("workflow");
-            let status = crate::workflows::gh_latest_status_json(workflow);
+            let status = gh_latest_status_json_in(&context.root, workflow);
             if status.ok
                 && let Some(conclusion) = status.conclusion
             {
@@ -480,8 +404,8 @@ fn extract_version_from_badge(badge: &Badge) -> Option<String> {
     None
 }
 
-fn load_config_for_context(context: &ProjectContext) -> anyhow::Result<Config> {
-    load_config(&std::env::current_dir()?, &context.root)
+fn load_config_for_context(current_dir: &Path, context: &ProjectContext) -> anyhow::Result<Config> {
+    load_config(current_dir, &context.root)
 }
 
 fn version_options(
@@ -562,128 +486,11 @@ fn shorten(text: &str, max: usize) -> String {
     output
 }
 
-fn resolve_metadata(
-    context: &ProjectContext,
-    npm_packages: Option<&[NpmPackage]>,
-) -> anyhow::Result<ResolvedMetadata> {
-    match context.ecosystem {
-        Some(Ecosystem::Node) => resolve_node_metadata(context, npm_packages),
-        Some(Ecosystem::MoonBit) => resolve_moonbit_metadata(context),
-        Some(Ecosystem::Rust) => resolve_rust_metadata(context),
-        None => Ok(ResolvedMetadata::default()),
-    }
-}
-
-fn resolve_node_metadata(
-    context: &ProjectContext,
-    npm_packages: Option<&[NpmPackage]>,
-) -> anyhow::Result<ResolvedMetadata> {
-    let local_packages;
-    let packages = match npm_packages {
-        Some(packages) => packages,
-        None => {
-            local_packages = local_npm_packages(context);
-            &local_packages
-        }
-    };
-    let repo_name = context.git.as_ref().and_then(|git| git.repo.as_deref());
-    let package = select_representative_npm_package(
-        &packages
-            .iter()
-            .filter(|package| package.published)
-            .cloned()
-            .collect::<Vec<_>>(),
-        repo_name,
-    )
-    .or_else(|| packages.first().cloned())
-    .with_context(|| {
-        if context.manifests.package_json_all.is_empty() {
-            "package.json missing"
-        } else {
-            "no publishable npm packages found"
-        }
-    })?;
-    Ok(ResolvedMetadata {
-        name: Some(package.name.clone()),
-        version: package.registry.version.clone().or(package.version),
-        license: package.registry.license.clone().or(package.license),
-        repository: package
-            .registry
-            .repository
-            .clone()
-            .or_else(|| repository_to_string(package.repository)),
-        description: package.registry.description.clone().or(package.description),
-        registry: Some(package.registry),
-    })
-}
-
-fn resolve_moonbit_metadata(context: &ProjectContext) -> anyhow::Result<ResolvedMetadata> {
-    let manifest_path = context
-        .manifests
-        .moon_mod
-        .as_ref()
-        .context("moon.mod.json missing")?;
-    let module = read_moon_mod(manifest_path)?;
-    Ok(ResolvedMetadata {
-        name: module.name,
-        version: module.version,
-        license: None,
-        repository: None,
-        description: None,
-        registry: None,
-    })
-}
-
-fn resolve_rust_metadata(context: &ProjectContext) -> anyhow::Result<ResolvedMetadata> {
-    let manifest_path = context
-        .manifests
-        .cargo_toml
-        .as_ref()
-        .context("Cargo.toml missing")?;
-    let package = read_resolved_cargo_package(manifest_path)?.unwrap_or_default();
-    let registry = package
-        .name
-        .as_deref()
-        .and_then(|name| fetch_crates_metadata(name).ok())
-        .unwrap_or_else(RegistryMetadata::empty);
-    Ok(ResolvedMetadata {
-        name: package.name,
-        version: registry.version.clone().or(package.version),
-        license: registry.license.clone().or(package.license),
-        repository: registry.repository.clone().or(package.repository),
-        description: registry.description.clone().or(package.description),
-        registry: Some(registry),
-    })
-}
-
-fn infer_owner_repo(repository: &Option<String>) -> (Option<String>, Option<String>) {
-    let url = match repository {
-        Some(url) => url,
-        None => return (None, None),
-    };
-    let cleaned = url
-        .trim()
-        .trim_end_matches(".git")
-        .replace("git+", "")
-        .replace("git://", "https://");
-    let parts: Vec<&str> = cleaned.split('/').collect();
-    if parts.len() < 2 {
-        return (None, None);
-    }
-    let repo = parts.last().unwrap_or(&"").to_string();
-    let owner = parts.get(parts.len() - 2).unwrap_or(&"").to_string();
-    if owner.is_empty() || repo.is_empty() {
-        return (None, None);
-    }
-    (Some(owner), Some(repo))
-}
-
-fn repository_to_string(repo: Option<RepositoryField>) -> Option<String> {
-    match repo {
-        Some(RepositoryField::String(value)) => Some(value),
-        Some(RepositoryField::Object { url }) => url,
-        None => None,
-    }
+#[derive(Debug, Serialize)]
+struct WarningJson {
+    code: String,
+    message: String,
+    meta: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -695,21 +502,6 @@ struct DryRunJson {
     missing_ids: Option<Vec<String>>,
     removed_kinds: Option<std::collections::HashMap<String, usize>>,
     warnings: Vec<WarningJson>,
-}
-
-fn unified_diff(path: &std::path::Path, original: &str, updated: &str) -> String {
-    if original == updated {
-        return String::new();
-    }
-    let rel_path = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("README.md");
-    let patch = diffy::create_patch(original, updated);
-    let formatted = diffy::PatchFormatter::new().fmt_patch(&patch).to_string();
-    formatted
-        .replace("--- original\n", &format!("--- a/{}\n", rel_path))
-        .replace("+++ modified\n", &format!("+++ b/{}\n", rel_path))
 }
 
 fn print_diff(diff: &str) {
@@ -763,572 +555,4 @@ fn build_remove_warnings(
         }
     }
     warnings
-}
-
-#[derive(Debug, Serialize)]
-struct ListJson {
-    schema: String,
-    repo: Option<RepoJson>,
-    config: Option<ConfigJson>,
-    readme: ReadmeJson,
-    manifests: HashMap<String, serde_json::Value>,
-    registries: HashMap<String, serde_json::Value>,
-    ci: CiJson,
-    readme_block: ReadmeBlockJson,
-    warnings: Vec<WarningJson>,
-}
-
-#[derive(Debug, Serialize)]
-struct ConfigJson {
-    version: ConfigVersionJson,
-    badges: ConfigBadgesJson,
-}
-
-#[derive(Debug, Serialize)]
-struct ConfigVersionJson {
-    allow_yy_calver: bool,
-    year_min: i32,
-    year_max: i32,
-}
-
-#[derive(Debug, Serialize)]
-struct ConfigBadgesJson {
-    exclude: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct RepoJson {
-    git_root: String,
-    remote: Option<String>,
-    owner: Option<String>,
-    name: Option<String>,
-    default_branch: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct ReadmeJson {
-    path: String,
-    newline: String,
-    trailing_newline: bool,
-    markers: MarkerJson,
-}
-
-#[derive(Debug, Serialize)]
-struct MarkerJson {
-    present: bool,
-    count: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct CiJson {
-    workflows_dir: String,
-    workflows: Vec<WorkflowJson>,
-}
-
-#[derive(Debug, Serialize)]
-struct WorkflowJson {
-    file: String,
-    name: String,
-    badge: WorkflowBadgeJson,
-    latest_status: GhStatusJson,
-}
-
-#[derive(Debug, Serialize)]
-struct WorkflowBadgeJson {
-    kind: String,
-    image: String,
-    link: String,
-}
-
-#[derive(Debug, Serialize)]
-struct GhStatusJson {
-    source: String,
-    ok: bool,
-    reason: Option<String>,
-    conclusion: Option<String>,
-    run_id: Option<u64>,
-    html_url: Option<String>,
-    updated_at: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct ReadmeBlockJson {
-    raw: String,
-    badges: Vec<ReadmeBadgeJson>,
-}
-
-#[derive(Debug, Serialize)]
-struct ReadmeBadgeJson {
-    id: String,
-    kind: String,
-    label: String,
-    image: String,
-    link: Option<String>,
-    source: String,
-    meta: Option<serde_json::Value>,
-    raw: String,
-}
-
-#[derive(Debug, Serialize)]
-struct WarningJson {
-    code: String,
-    message: String,
-    meta: Option<serde_json::Value>,
-}
-
-fn build_list_json(
-    context: &ProjectContext,
-    readme_path: &std::path::Path,
-    content: &str,
-    badges: &[String],
-    options: &VersionOptions,
-    config: Option<&Config>,
-) -> anyhow::Result<ListJson> {
-    let repo = context.git.as_ref().map(|git| RepoJson {
-        git_root: git.root.to_string_lossy().to_string(),
-        remote: git.remote.clone(),
-        owner: git.owner.clone(),
-        name: git.repo.clone(),
-        default_branch: git.default_branch.clone(),
-    });
-
-    let (newline, trailing) = readme_newline_info(content);
-    let marker_count = crate::readme::marker_count(content);
-    let readme_json = ReadmeJson {
-        path: readme_path.to_string_lossy().to_string(),
-        newline,
-        trailing_newline: trailing,
-        markers: MarkerJson {
-            present: content.contains(BDG_BEGIN) && content.contains(BDG_END),
-            count: marker_count,
-        },
-    };
-
-    let npm_packages = local_npm_packages(context);
-    let manifests = collect_manifests(context, options, &npm_packages)?;
-    let registries = collect_registries(context, options, &npm_packages)?;
-    let ci = build_ci_json(context)?;
-    let readme_block = build_readme_block(badges);
-
-    let config_json = config.map(|cfg| ConfigJson {
-        version: ConfigVersionJson {
-            allow_yy_calver: cfg.version.allow_yy_calver,
-            year_min: cfg.version.year_min,
-            year_max: cfg.version.year_max,
-        },
-        badges: ConfigBadgesJson {
-            exclude: cfg.badges.exclude.clone(),
-        },
-    });
-    Ok(ListJson {
-        schema: "bdg.list/v1".to_string(),
-        repo,
-        config: config_json,
-        readme: readme_json,
-        manifests,
-        registries,
-        ci,
-        readme_block,
-        warnings: Vec::new(),
-    })
-}
-
-fn collect_manifests(
-    context: &ProjectContext,
-    options: &VersionOptions,
-    node_packages: &[NpmPackage],
-) -> anyhow::Result<HashMap<String, serde_json::Value>> {
-    let mut manifests = HashMap::new();
-    let representative_node = select_representative_npm_package(
-        node_packages,
-        context.git.as_ref().and_then(|git| git.repo.as_deref()),
-    )
-    .or_else(|| {
-        context
-            .manifests
-            .package_json
-            .as_ref()
-            .and_then(|path| read_package_json(path).ok().map(|pkg| (path, pkg)))
-            .and_then(|(path, pkg)| {
-                Some(NpmPackage {
-                    path: path.clone(),
-                    name: pkg.name?,
-                    version: pkg.version,
-                    license: pkg.license,
-                    repository: pkg.repository,
-                    description: pkg.description,
-                    private: pkg.private.unwrap_or(false),
-                    registry: RegistryMetadata::empty(),
-                    published: false,
-                })
-            })
-    });
-    if let Some(pkg) = representative_node {
-        let repo = repository_to_string(pkg.repository);
-        let version_info = pkg
-            .version
-            .as_deref()
-            .map(|v| crate::version::classify_version(v, options));
-        manifests.insert(
-            "node".to_string(),
-            serde_json::json!({
-                "path": pkg.path.to_string_lossy(),
-                "name": pkg.name,
-                "version": pkg.version,
-                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                "license": pkg.license,
-                "repository": repo,
-                "private": pkg.private,
-                "published": pkg.published,
-            }),
-        );
-    }
-    if !node_packages.is_empty() {
-        let packages = node_packages
-            .iter()
-            .map(|pkg| {
-                let version_info = pkg
-                    .version
-                    .as_deref()
-                    .map(|v| crate::version::classify_version(v, options));
-                serde_json::json!({
-                    "path": pkg.path.to_string_lossy(),
-                    "name": pkg.name,
-                    "version": pkg.version,
-                    "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                    "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                    "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                    "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                    "license": pkg.license,
-                    "repository": repository_to_string(pkg.repository.clone()),
-                    "private": pkg.private,
-                    "published": pkg.published,
-                })
-            })
-            .collect::<Vec<_>>();
-        manifests.insert(
-            "node_packages".to_string(),
-            serde_json::Value::Array(packages),
-        );
-    }
-    if let Some(path) = &context.manifests.cargo_toml
-        && let Some(package) = read_resolved_cargo_package(path)?
-    {
-        let version_info = package
-            .version
-            .as_deref()
-            .map(|v| crate::version::classify_version(v, options));
-        manifests.insert(
-            "rust".to_string(),
-            serde_json::json!({
-                "path": path.to_string_lossy(),
-                "name": package.name,
-                "version": package.version,
-                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                "license": package.license,
-                "repository": package.repository,
-            }),
-        );
-    }
-    if let Some(path) = &context.manifests.moon_mod {
-        let module = read_moon_mod(path)?;
-        let version_info = module
-            .version
-            .as_deref()
-            .map(|v| crate::version::classify_version(v, options));
-        manifests.insert(
-            "moon".to_string(),
-            serde_json::json!({
-                "path": path.to_string_lossy(),
-                "name": module.name,
-                "version": module.version,
-                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                "readme": module.readme,
-            }),
-        );
-    }
-    Ok(manifests)
-}
-
-fn collect_registries(
-    context: &ProjectContext,
-    options: &VersionOptions,
-    npm_packages: &[NpmPackage],
-) -> anyhow::Result<HashMap<String, serde_json::Value>> {
-    let mut registries = HashMap::new();
-    let npm_registry_packages = npm_packages
-        .iter()
-        .map(|package| {
-            let version_info = package
-                .registry
-                .version
-                .as_deref()
-                .map(|v| crate::version::classify_version(v, options));
-            serde_json::json!({
-                "ok": package.published,
-                "package": package.name,
-                "path": package.path.to_string_lossy(),
-                "latest": package.registry.version,
-                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                "license": package.registry.license,
-                "homepage": package.registry.homepage,
-                "repository": package.registry.repository,
-                "reason": if package.published { None } else { Some("unavailable") },
-            })
-        })
-        .collect::<Vec<_>>();
-    if !npm_registry_packages.is_empty() {
-        registries.insert(
-            "npm_packages".to_string(),
-            serde_json::Value::Array(npm_registry_packages),
-        );
-    }
-    let published_packages = npm_packages
-        .iter()
-        .filter(|package| package.published)
-        .cloned()
-        .collect::<Vec<_>>();
-    if let Some(package) = select_representative_npm_package(
-        &published_packages,
-        context.git.as_ref().and_then(|git| git.repo.as_deref()),
-    )
-    .or_else(|| {
-        select_representative_npm_package(
-            npm_packages,
-            context.git.as_ref().and_then(|git| git.repo.as_deref()),
-        )
-    }) {
-        let version_info = package
-            .registry
-            .version
-            .as_deref()
-            .map(|v| crate::version::classify_version(v, options));
-        registries.insert(
-            "npm".to_string(),
-            serde_json::json!({
-                "ok": package.published,
-                "package": package.name,
-                "path": package.path.to_string_lossy(),
-                "latest": package.registry.version,
-                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                "license": package.registry.license,
-                "homepage": package.registry.homepage,
-                "repository": package.registry.repository,
-                "reason": if package.published { None } else { Some("unavailable") },
-            }),
-        );
-    }
-    if let Some(path) = &context.manifests.cargo_toml
-        && let Some(package) = read_resolved_cargo_package(path)?
-        && let Some(name) = package.name.as_deref()
-    {
-        match fetch_crates_metadata(name) {
-            Ok(meta) => {
-                let version_info = meta
-                    .version
-                    .as_deref()
-                    .map(|v| crate::version::classify_version(v, options));
-                registries.insert(
-                    "crates".to_string(),
-                    serde_json::json!({
-                        "ok": true,
-                        "crate": name,
-                        "latest": meta.version,
-                        "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
-                        "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
-                        "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
-                        "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
-                        "license": meta.license,
-                        "repository": meta.repository,
-                        "downloads": meta.downloads,
-                    }),
-                );
-            }
-            Err(_) => {
-                registries.insert(
-                    "crates".to_string(),
-                    serde_json::json!({
-                        "ok": false,
-                        "crate": name,
-                        "reason": "network",
-                    }),
-                );
-            }
-        }
-    }
-    if let Some(path) = &context.manifests.moon_mod {
-        let module = read_moon_mod(path)?;
-        registries.insert(
-            "mooncakes".to_string(),
-            serde_json::json!({
-                "ok": false,
-                "module": module.name,
-                "reason": "disabled",
-            }),
-        );
-    }
-    Ok(registries)
-}
-
-fn build_ci_json(context: &ProjectContext) -> anyhow::Result<CiJson> {
-    let workflows = detect_workflows(&context.root);
-    let workflows_json = workflows
-        .iter()
-        .map(|wf| workflow_to_json(context, wf))
-        .collect::<Vec<_>>();
-    Ok(CiJson {
-        workflows_dir: ".github/workflows".to_string(),
-        workflows: workflows_json,
-    })
-}
-
-fn workflow_to_json(context: &ProjectContext, workflow: &WorkflowInfo) -> WorkflowJson {
-    let mut image = String::new();
-    let mut link = String::new();
-    if let Some(git) = &context.git
-        && let (Some(owner), Some(repo)) = (git.owner.as_deref(), git.repo.as_deref())
-    {
-        image = format!(
-            "https://github.com/{}/{}/actions/workflows/{}/badge.svg",
-            owner, repo, workflow.file
-        );
-        link = format!(
-            "https://github.com/{}/{}/actions/workflows/{}",
-            owner, repo, workflow.file
-        );
-    }
-    let status = gh_latest_status_json(&workflow.file);
-    WorkflowJson {
-        file: workflow.file.clone(),
-        name: workflow.name.clone(),
-        badge: WorkflowBadgeJson {
-            kind: "github_actions".to_string(),
-            image,
-            link,
-        },
-        latest_status: GhStatusJson {
-            source: "gh".to_string(),
-            ok: status.ok,
-            reason: status.reason,
-            conclusion: status.conclusion,
-            run_id: status.run_id,
-            html_url: status.html_url,
-            updated_at: status.updated_at,
-        },
-    }
-}
-
-fn build_readme_block(badges: &[String]) -> ReadmeBlockJson {
-    let raw = if badges.is_empty() {
-        String::new()
-    } else {
-        let mut joined = badges.join("\n");
-        joined.push('\n');
-        joined
-    };
-    let mut parsed = Vec::new();
-    let mut in_code_fence = false;
-    for line in badges {
-        if is_code_fence(line) {
-            in_code_fence = !in_code_fence;
-            continue;
-        }
-        if in_code_fence {
-            continue;
-        }
-        let badge = crate::readme_badges::parse_badge_line(line);
-        parsed.push(readme_badge_from_parsed(badge));
-    }
-    ReadmeBlockJson {
-        raw,
-        badges: parsed,
-    }
-}
-
-fn is_code_fence(line: &str) -> bool {
-    line.trim_start().starts_with("```")
-}
-
-fn readme_badge_from_parsed(parsed: ParsedBadge) -> ReadmeBadgeJson {
-    ReadmeBadgeJson {
-        id: parsed.id,
-        kind: parsed.kind,
-        label: parsed.label,
-        image: parsed.image,
-        link: parsed.link,
-        source: parsed.source,
-        meta: parsed.meta,
-        raw: parsed.raw,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{NpmPackage, select_representative_npm_package};
-    use crate::providers::RegistryMetadata;
-    use std::path::PathBuf;
-
-    fn npm_package(path: &str, name: &str) -> NpmPackage {
-        NpmPackage {
-            path: PathBuf::from(path),
-            name: name.to_string(),
-            version: Some("1.0.0".to_string()),
-            license: None,
-            repository: None,
-            description: None,
-            private: false,
-            registry: RegistryMetadata {
-                version: Some("1.0.0".to_string()),
-                license: None,
-                repository: None,
-                description: None,
-                downloads: None,
-                homepage: None,
-            },
-            published: true,
-        }
-    }
-
-    #[test]
-    fn representative_npm_package_prefers_repo_name() {
-        let selected = select_representative_npm_package(
-            &[
-                npm_package("packages/core/package.json", "n8n-core"),
-                npm_package("packages/cli/package.json", "n8n"),
-            ],
-            Some("n8n"),
-        )
-        .expect("selected");
-
-        assert_eq!(selected.name, "n8n");
-    }
-
-    #[test]
-    fn representative_npm_package_falls_back_to_sorted_first() {
-        let selected = select_representative_npm_package(
-            &[
-                npm_package("packages/cli/package.json", "n8n"),
-                npm_package("packages/core/package.json", "n8n-core"),
-            ],
-            Some("other"),
-        )
-        .expect("selected");
-
-        assert_eq!(selected.name, "n8n");
-    }
 }

@@ -1,60 +1,159 @@
 # bdg
 <!-- bdg:begin -->
 [![crates.io](https://img.shields.io/crates/v/bdg.svg)](https://crates.io/crates/bdg)
-[![CI](https://github.com/f4ah6o/bdg-rs/actions/workflows/rust.yaml/badge.svg)](https://github.com/f4ah6o/bdg-rs/actions/workflows/rust.yaml)
+[![CI](https://github.com/f4ah6o/bdg-rs/actions/workflows/ci.yaml/badge.svg)](https://github.com/f4ah6o/bdg-rs/actions/workflows/ci.yaml)
 <!-- bdg:end -->
 
-Interactive badge manager CLI for README files. It detects project metadata, suggests badges, and keeps edits confined to a managed marker block.
+`bdg` is a focused CLI for discovering, validating, synchronizing, and removing README badges without rewriting unrelated documentation.
 
-## Features
-- Detects Node, Rust, and MoonBit manifests
-- Reads registry metadata (npm, crates)
-- Detects GitHub Actions workflows
-- Adds/removes badges safely inside marker block
-- Supports version, CI, license, release, docs, downloads, and coverage badges
-- Optional TUI with multi-select for add/remove
+It treats badges as managed project metadata rather than ad-hoc Markdown: project manifests and CI configuration are discovered, a deterministic README change is planned, and only the `bdg` marker block is modified.
+
+## Highlights
+
+- Rust, Node, and MoonBit project detection
+- crates.io and npm registry metadata
+- GitHub Actions workflow discovery
+- version, CI, license, release, docs, downloads, and coverage badges
+- deterministic non-interactive `sync` for local automation and CI
+- structural `check` with machine-readable JSON output
+- dry-run diffs with exit code `2` when changes are pending
+- targeted removal by stable badge id or kind
+- repository-aware config discovery
+- `-C/--directory` for scripting without changing shell state
+- optional TUI for interactive add/remove workflows
+- README writes constrained to `<!-- bdg:begin -->` / `<!-- bdg:end -->`
 
 ## Installation
+
 ```bash
 cargo install bdg
 ```
 
-## Usage
+## Recommended workflow
+
+Use `sync` when the README should reflect detected project metadata:
+
+```bash
+# Apply the canonical managed badge set.
+bdg sync
+
+# CI/pre-commit: do not write; exit 2 when synchronization is needed.
+bdg sync --check
+
+# Inspect the exact pending patch.
+bdg sync --dry-run
+
+# Restrict synchronization to selected badge classes.
+bdg sync --only ci,version,license
+```
+
+Use `check` when you only want to validate the existing managed block. It performs no registry lookup and does not modify the README:
+
+```bash
+bdg check
+bdg check --strict
+bdg check --json
+```
+
+`--strict` treats unrecognized lines inside the managed block as errors. Without it, they are warnings.
+
+## Commands
+
+### `bdg sync`
+
+Reconciles the managed block non-interactively from detected project metadata.
+
+```bash
+bdg sync
+bdg sync --only ci,version,license,release,docs,downloads,coverage
+bdg sync --check
+bdg sync --dry-run
+bdg sync --json --check
+```
+
+`--check` and `--dry-run` never write. They exit with code `2` when a change would be made.
+
+### `bdg check`
+
+Validates marker structure, managed badge syntax, and duplicate badge ids.
+
+```bash
+bdg check
+bdg check --strict
+bdg check --json
+```
+
+JSON output uses the `bdg.check/v1` schema.
+
+### `bdg add`
+
+Interactive/manual badge selection. `--yes` makes it non-interactive; for canonical automation prefer `bdg sync`.
+
 ```bash
 bdg add
 bdg add --yes
-bdg add --only ci,version,license,release,docs,downloads,coverage
+bdg add --only ci,version,license
 bdg add --dry-run
+```
 
+### `bdg list`
+
+Inspects the current managed badges plus detected repository, manifest, registry, and CI metadata.
+
+```bash
 bdg list
 bdg list --json
+bdg list --quiet
+```
 
+`list` is read-only and reports the actual marker state; it does not synthesize a missing block.
+
+### `bdg remove`
+
+Removes managed badges interactively or by stable id/kind.
+
+```bash
 bdg remove
-bdg remove --id ci:ci.yaml --id npm:@scope/pkg
+bdg remove --id ci:rust.yaml
+bdg remove --id npm:@scope/pkg
 bdg remove --kind github_actions
 bdg remove --all
 bdg remove --dry-run
-
-bdg skills
+bdg remove --json --dry-run
 ```
 
-## Managed Block
-All edits are confined to the marker block:
+### `bdg skills`
+
+Prints the bundled Agent Skills `SKILL.md` so agents can load the current CLI contract directly.
+
+## Run against another directory
+
+All commands support `-C/--directory`:
+
+```bash
+bdg -C ../project check
+bdg --directory ../project sync --check
+bdg -C ../project list --json
+```
+
+Relative paths are resolved from the process working directory. Config discovery still begins at the requested directory and stops at its Git root.
+
+## Managed block
+
+All writes are constrained to one marker pair:
+
 ```md
 <!-- bdg:begin -->
 [![crates.io](https://img.shields.io/crates/v/bdg.svg)](https://crates.io/crates/bdg)
 <!-- bdg:end -->
 ```
-If missing, bdg inserts it below the first H1 heading.
 
-## TUI Keys
-- Up/Down: move
-- Space: toggle
-- Enter: apply
-- q/Esc/Ctrl+C: cancel
+If the block is absent, `add`/`sync` insert it below the first H1 heading. `check` reports missing or duplicated markers instead of repairing them.
 
-## Config (.bdg.toml)
-bdg searches from current directory up to git root and uses the first config found.
+## Configuration
+
+`bdg` searches from the active directory up to the Git root for `.bdg.toml`.
+
 ```toml
 [version]
 allow_yy_calver = false
@@ -65,24 +164,21 @@ year_max = 2199
 exclude = ["release", "coverage"]
 ```
 
-## Agent Skills
-`bdg skills` prints the bundled Agent Skills `SKILL.md` for `bdg` so other agents and tools can load the current CLI usage context directly.
+An explicit `--only` overrides configured badge exclusions for that invocation.
 
-## Version Classification
-Versions are classified as calver, semver, or unknown with calver priority.
-Use `--allow-yy-calver` to opt in to YY.MM/YY.MM.MICRO calver patterns.
+## TUI keys
 
-## Exit Codes
-- 0: no change or success
-- 2: changes detected in dry-run
-- 1: error
+- Up/Down: move
+- Space: toggle
+- Enter: apply
+- q/Esc/Ctrl+C: cancel
 
+## Version classification
 
+Versions are classified as calver, semver, or unknown with calver priority. Use `--allow-yy-calver` to opt in to `YY.MM` / `YY.MM.MICRO` patterns.
 
+## Exit codes
 
-
-
-
-
-
-
+- `0`: success, valid state, or already synchronized
+- `1`: runtime or validation error
+- `2`: CLI usage error, or pending changes reported by `--dry-run` / `--check`
