@@ -2,6 +2,7 @@
 name = "bdg"
 version = "2026.8.0"
 edition = "2024"
+rust-version = "1.99"
 description = "Deterministic README badge manager for project metadata and CI"
 license = "Apache-2.0"
 repository = "https://github.com/f4ah6o/bdg-rs"
@@ -10,13 +11,13 @@ repository = "https://github.com/f4ah6o/bdg-rs"
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-diffy = "0.3"
-crossterm = "0.27"
-ratatui = "0.26"
+diffy = "0.5"
+crossterm = "0.29"
+ratatui = "0.30"
 semver = "1.0"
-toml = "0.8"
-ureq = { version = "3.3", default-features = false, features = ["rustls"] }
+toml = "1.1"
+ureq = { version = "3.4", default-features = false, features = ["rustls"] }
 walkdir = "2.5"
 
 [dev-dependencies]
-tempfile = "3.24"
+tempfile = "3.27"
