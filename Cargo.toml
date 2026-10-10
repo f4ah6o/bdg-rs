@@ -1,6 +1,6 @@
 [package]
 name = "bdg"
-version = "2026.8.0"
+version = "2026.10.1"
 edition = "2024"
 rust-version = "1.99"
 description = "Deterministic README badge manager for project metadata and CI"
