@@ -50,7 +50,7 @@ fn run_loop(
     let mut state = SelectionState::new(items.len(), preselected);
     loop {
         terminal.draw(|frame| {
-            let size = frame.size();
+            let size = frame.area();
             let constraints = if header.is_some() {
                 vec![
                     Constraint::Length(1),
