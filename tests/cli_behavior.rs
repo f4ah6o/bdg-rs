@@ -288,3 +288,142 @@ fn parse_error_exits_with_code_two() {
     assert!(stderr.contains("Usage:"));
     assert!(output.stdout.is_empty());
 }
+
+#[test]
+fn sync_only_selects_repository_signal_badges() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        r#"
+[package]
+name = "bdg-signals-fixture"
+version = "0.1.0"
+repository = "https://github.com/f4ah6o/bdg-rs"
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "--yes",
+            "--only",
+            "watchers,sponsors,loc,scorecard,deps",
+            "--dry-run",
+        ])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/github/watchers/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("img.shields.io/github/sponsors/f4ah6o.svg"));
+    assert!(stdout.contains("img.shields.io/tokei/lines/github/f4ah6o/bdg-rs.svg"));
+    assert!(stdout.contains("api.securityscorecards.dev/projects/github.com/f4ah6o/bdg-rs/badge"));
+    assert!(stdout.contains("deps.rs/repo/github/f4ah6o/bdg-rs/status.svg"));
+    assert!(!stdout.contains("img.shields.io/crates/v/bdg-signals-fixture.svg"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn sync_pyproject_emits_pypi_badges_for_published_package() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("pyproject.toml"),
+        r#"
+[project]
+name = "requests"
+version = "2.31.0"
+license = {text = "Apache-2.0"}
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["sync", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/pypi/v/requests.svg"));
+    assert!(stdout.contains("img.shields.io/pypi/dm/requests.svg"));
+    assert!(!stdout.contains("img.shields.io/pypi/pyversions/requests.svg"));
+}
+
+#[test]
+fn pyproject_without_pypi_release_gets_no_pypi_badges() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("pyproject.toml"),
+        r#"
+[project]
+name = "bdg-fixture-definitely-unpublished-xyz"
+version = "0.1.0"
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["sync", "--dry-run"])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains("img.shields.io/pypi/v/"));
+    assert!(!stdout.contains("img.shields.io/pypi/dm/"));
+}
+
+#[test]
+fn add_only_pyversions_selects_python_versions_badge() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("pyproject.toml"),
+        r#"
+[project]
+name = "requests"
+version = "2.31.0"
+"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["add", "--yes", "--only", "pyversions", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/pypi/pyversions/requests.svg"));
+    assert!(!stdout.contains("img.shields.io/pypi/v/requests.svg"));
+}
+
+#[test]
+fn add_only_types_selects_npm_types_badge() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("package.json"),
+        r#"{ "name": "react", "version": "18.2.0", "repository": "https://github.com/facebook/react" }"#,
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("README.md"), "# fixture\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bdg"))
+        .current_dir(temp.path())
+        .args(["add", "--yes", "--only", "types", "--dry-run"])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("img.shields.io/npm/types/react.svg"));
+    assert!(!stdout.contains("img.shields.io/npm/v/react.svg"));
+}

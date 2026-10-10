@@ -38,6 +38,12 @@ pub fn fetch_crates_metadata(crate_name: &str) -> anyhow::Result<RegistryMetadat
     parse_crates_metadata(&text)
 }
 
+pub fn fetch_pypi_metadata(package: &str) -> anyhow::Result<RegistryMetadata> {
+    let url = format!("https://pypi.org/pypi/{}/json", package);
+    let text = fetch_json_text(&url)?;
+    parse_pypi_metadata(&text)
+}
+
 fn parse_npm_metadata(text: &str) -> anyhow::Result<RegistryMetadata> {
     let payload: NpmPackument = serde_json::from_str(text)?;
     let version = payload.dist_tags.get("latest").cloned().or(payload.version);
@@ -61,6 +67,54 @@ fn parse_crates_metadata(text: &str) -> anyhow::Result<RegistryMetadata> {
         downloads: Some(payload.crate_data.downloads as u64),
         homepage: payload.crate_data.homepage,
     })
+}
+
+fn parse_pypi_metadata(text: &str) -> anyhow::Result<RegistryMetadata> {
+    let payload: PypiResponse = serde_json::from_str(text)?;
+    let info = payload.info;
+    let license = pypi_license(&info);
+    let repository = pypi_project_url(&info, &["repository", "source", "code", "github"]);
+    let homepage = pypi_project_url(&info, &["homepage", "home"]);
+    Ok(RegistryMetadata {
+        version: info.version,
+        license,
+        repository,
+        description: info.summary,
+        downloads: None,
+        homepage,
+    })
+}
+
+fn pypi_license(info: &PypiInfo) -> Option<String> {
+    if let Some(expression) = info
+        .license_expression
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Some(expression.to_string());
+    }
+    if let Some(license) = info
+        .license
+        .as_ref()
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.len() <= 64 && !value.contains('\n'))
+    {
+        return Some(license.to_string());
+    }
+    info.classifiers.iter().find_map(|classifier| {
+        classifier
+            .strip_prefix("License :: OSI Approved :: ")
+            .map(|name| name.trim().trim_end_matches(" License").to_string())
+    })
+}
+
+fn pypi_project_url(info: &PypiInfo, wanted: &[&str]) -> Option<String> {
+    info.project_urls
+        .iter()
+        .find(|(key, _)| wanted.contains(&key.to_lowercase().as_str()))
+        .map(|(_, url)| url.clone())
 }
 
 fn fetch_json_text(url: &str) -> anyhow::Result<String> {
@@ -94,6 +148,23 @@ struct NpmRepository {
 }
 
 #[derive(Debug, Deserialize)]
+struct PypiResponse {
+    info: PypiInfo,
+}
+
+#[derive(Debug, Deserialize)]
+struct PypiInfo {
+    version: Option<String>,
+    summary: Option<String>,
+    license: Option<serde_json::Value>,
+    license_expression: Option<String>,
+    #[serde(default)]
+    project_urls: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    classifiers: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct CratesResponse {
     #[serde(rename = "crate")]
     crate_data: CrateData,
@@ -111,7 +182,7 @@ struct CrateData {
 
 #[cfg(test)]
 mod tests {
-    use super::{USER_AGENT, parse_crates_metadata, parse_npm_metadata};
+    use super::{USER_AGENT, parse_crates_metadata, parse_npm_metadata, parse_pypi_metadata};
 
     #[test]
     fn user_agent_includes_crate_version() {
@@ -187,5 +258,53 @@ mod tests {
             metadata.homepage.as_deref(),
             Some("https://example.com/crate")
         );
+    }
+
+    #[test]
+    fn parses_pypi_metadata() {
+        let metadata = parse_pypi_metadata(
+            r#"{
+                "info": {
+                    "name": "demo",
+                    "version": "1.4.2",
+                    "summary": "demo package",
+                    "license": null,
+                    "license_expression": "MIT",
+                    "project_urls": {
+                        "Homepage": "https://example.com/demo",
+                        "Source": "https://github.com/example/demo"
+                    },
+                    "classifiers": ["License :: OSI Approved :: MIT License"]
+                }
+            }"#,
+        )
+        .expect("metadata");
+
+        assert_eq!(metadata.version.as_deref(), Some("1.4.2"));
+        assert_eq!(metadata.license.as_deref(), Some("MIT"));
+        assert_eq!(
+            metadata.repository.as_deref(),
+            Some("https://github.com/example/demo")
+        );
+        assert_eq!(metadata.description.as_deref(), Some("demo package"));
+        assert_eq!(
+            metadata.homepage.as_deref(),
+            Some("https://example.com/demo")
+        );
+    }
+
+    #[test]
+    fn pypi_license_falls_back_to_short_license_and_classifiers() {
+        let short =
+            parse_pypi_metadata(r#"{"info": {"version": "1.0.0", "license": "Apache-2.0"}}"#)
+                .expect("metadata");
+        assert_eq!(short.license.as_deref(), Some("Apache-2.0"));
+
+        let classifier = parse_pypi_metadata(
+            r#"{"info": {"version": "1.0.0", "license": {"text": "long license body..."},
+                "classifiers": ["License :: OSI Approved :: BSD License"]}}"#,
+        )
+        .expect("metadata");
+        assert_eq!(classifier.license.as_deref(), Some("BSD"));
     }
 }

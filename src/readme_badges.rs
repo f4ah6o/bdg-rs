@@ -139,6 +139,44 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
             Some(serde_json::json!({ "package": pkg })),
         );
     }
+    if let Some(pkg) = extract_after_prefix(image_trimmed, "img.shields.io/npm/types/") {
+        return (
+            "npm_types".to_string(),
+            format!("npm_types:{}", pkg),
+            Some(serde_json::json!({ "package": pkg })),
+        );
+    }
+    if let Some(pkg) = extract_after_prefix(image_trimmed, "img.shields.io/pypi/v/") {
+        return (
+            "pypi_version".to_string(),
+            format!("pypi:{}", pkg),
+            Some(serde_json::json!({ "package": pkg })),
+        );
+    }
+    if let Some(pkg) = extract_after_prefix(image_trimmed, "img.shields.io/pypi/dm/")
+        .or_else(|| extract_after_prefix(image_trimmed, "img.shields.io/pypi/dt/"))
+        .or_else(|| extract_after_prefix(image_trimmed, "img.shields.io/pypi/dw/"))
+    {
+        return (
+            "pypi_downloads".to_string(),
+            format!("pypi_downloads:{}", pkg),
+            Some(serde_json::json!({ "package": pkg })),
+        );
+    }
+    if let Some(pkg) = extract_after_prefix(image_trimmed, "img.shields.io/pypi/pyversions/") {
+        return (
+            "pypi_pyversions".to_string(),
+            format!("pypi_pyversions:{}", pkg),
+            Some(serde_json::json!({ "package": pkg })),
+        );
+    }
+    if let Some(pkg) = extract_after_prefix(image_trimmed, "img.shields.io/pypi/l/") {
+        return (
+            "license".to_string(),
+            "license:pypi".to_string(),
+            Some(serde_json::json!({ "package": pkg })),
+        );
+    }
     if let Some(crate_name) = extract_after_prefix(image_trimmed, "img.shields.io/crates/v/") {
         return (
             "crates_version".to_string(),
@@ -235,6 +273,52 @@ fn infer_kind(image: &str, raw: &str) -> (String, String, Option<serde_json::Val
         return (
             "github_last_commit".to_string(),
             "activity:last_commit".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "img.shields.io/github/watchers/")
+    {
+        return (
+            "github_watchers".to_string(),
+            "watchers:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some(owner) =
+        extract_owner_after_prefix(image_trimmed, "img.shields.io/github/sponsors/")
+    {
+        return (
+            "github_sponsors".to_string(),
+            format!("sponsors:{}", owner),
+            Some(serde_json::json!({ "owner": owner })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "img.shields.io/tokei/lines/github/")
+    {
+        return (
+            "tokei_loc".to_string(),
+            "loc:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) =
+        extract_owner_repo_after_prefix(image_trimmed, "deps.rs/repo/github/")
+    {
+        return (
+            "deps_rs".to_string(),
+            "deps:github".to_string(),
+            Some(serde_json::json!({ "owner": owner, "repo": repo })),
+        );
+    }
+    if let Some((owner, repo)) = extract_owner_repo_after_prefix(
+        image_trimmed,
+        "api.securityscorecards.dev/projects/github.com/",
+    ) {
+        return (
+            "openssf_scorecard".to_string(),
+            "scorecard:github".to_string(),
             Some(serde_json::json!({ "owner": owner, "repo": repo })),
         );
     }
@@ -352,6 +436,18 @@ fn extract_docs_rs_crate(image: &str) -> Option<String> {
         None
     } else {
         Some(crate_name.to_string())
+    }
+}
+
+fn extract_owner_after_prefix(image: &str, prefix: &str) -> Option<String> {
+    let pos = image.find(prefix)?;
+    let remainder = &image[pos + prefix.len()..];
+    let before_query = remainder.split('?').next().unwrap_or("");
+    let owner = before_query.trim_end_matches(".svg").to_string();
+    if owner.is_empty() || owner.contains('/') {
+        None
+    } else {
+        Some(owner)
     }
 }
 

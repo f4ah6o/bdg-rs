@@ -1,8 +1,11 @@
 use crate::core::{Ecosystem, ProjectContext};
 use crate::manifest::{
     RepositoryField, read_moon_mod, read_package_json, read_resolved_cargo_package,
+    read_resolved_pyproject,
 };
-use crate::providers::{RegistryMetadata, fetch_crates_metadata, fetch_npm_metadata};
+use crate::providers::{
+    RegistryMetadata, fetch_crates_metadata, fetch_npm_metadata, fetch_pypi_metadata,
+};
 use anyhow::Context;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -84,6 +87,7 @@ pub(crate) fn resolve_metadata(
         Some(Ecosystem::Node) => resolve_node_metadata(context, npm_packages),
         Some(Ecosystem::MoonBit) => resolve_moonbit_metadata(context),
         Some(Ecosystem::Rust) => resolve_rust_metadata(context),
+        Some(Ecosystem::Python) => resolve_python_metadata(context),
         None => Ok(ResolvedMetadata::default()),
     }
 }
@@ -145,6 +149,28 @@ fn resolve_moonbit_metadata(context: &ProjectContext) -> anyhow::Result<Resolved
         repository: None,
         description: None,
         registry: None,
+    })
+}
+
+fn resolve_python_metadata(context: &ProjectContext) -> anyhow::Result<ResolvedMetadata> {
+    let manifest_path = context
+        .manifests
+        .pyproject_toml
+        .as_ref()
+        .context("pyproject.toml missing")?;
+    let project = read_resolved_pyproject(manifest_path)?.unwrap_or_default();
+    let registry = project
+        .name
+        .as_deref()
+        .and_then(|name| fetch_pypi_metadata(name).ok())
+        .unwrap_or_else(RegistryMetadata::empty);
+    Ok(ResolvedMetadata {
+        name: project.name,
+        version: registry.version.clone().or(project.version),
+        license: registry.license.clone().or(project.license),
+        repository: registry.repository.clone().or(project.repository),
+        description: registry.description.clone().or(project.description),
+        registry: Some(registry),
     })
 }
 

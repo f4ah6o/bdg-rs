@@ -15,6 +15,13 @@ pub enum BadgeKind {
     Issues,
     PullRequests,
     Activity,
+    Watchers,
+    Sponsors,
+    Loc,
+    Scorecard,
+    Deps,
+    Types,
+    Pyversions,
 }
 
 impl BadgeKind {
@@ -33,6 +40,13 @@ impl BadgeKind {
             Self::Issues => "issues",
             Self::PullRequests => "pulls",
             Self::Activity => "activity",
+            Self::Watchers => "watchers",
+            Self::Sponsors => "sponsors",
+            Self::Loc => "loc",
+            Self::Scorecard => "scorecard",
+            Self::Deps => "deps",
+            Self::Types => "types",
+            Self::Pyversions => "pyversions",
         }
     }
 }
@@ -134,6 +148,42 @@ pub fn badge_for_crates_msrv(crate_name: &str) -> Badge {
         "MSRV",
         format!("https://img.shields.io/crates/msrv/{}.svg", crate_name),
         Some(format!("https://crates.io/crates/{}", crate_name)),
+    )
+}
+
+pub fn badge_for_pypi(package: &str) -> Badge {
+    badge(
+        BadgeKind::Version,
+        "pypi",
+        format!("https://img.shields.io/pypi/v/{}.svg", package),
+        Some(format!("https://pypi.org/project/{}", package)),
+    )
+}
+
+pub fn badge_for_pypi_downloads(package: &str) -> Badge {
+    badge(
+        BadgeKind::Downloads,
+        "pypi downloads",
+        format!("https://img.shields.io/pypi/dm/{}.svg", package),
+        Some(format!("https://pypistats.org/packages/{}", package)),
+    )
+}
+
+pub fn badge_for_pypi_pyversions(package: &str) -> Badge {
+    optional_badge(
+        BadgeKind::Pyversions,
+        "Python versions",
+        format!("https://img.shields.io/pypi/pyversions/{}.svg", package),
+        Some(format!("https://pypi.org/project/{}", package)),
+    )
+}
+
+pub fn badge_for_npm_types(package: &str) -> Badge {
+    optional_badge(
+        BadgeKind::Types,
+        "npm types",
+        format!("https://img.shields.io/npm/types/{}.svg", package),
+        Some(format!("https://www.npmjs.com/package/{}", package)),
     )
 }
 
@@ -281,6 +331,63 @@ pub fn badge_for_github_last_commit(owner: &str, repo: &str) -> Badge {
     )
 }
 
+pub fn badge_for_github_watchers(owner: &str, repo: &str) -> Badge {
+    optional_badge(
+        BadgeKind::Watchers,
+        "GitHub watchers",
+        format!(
+            "https://img.shields.io/github/watchers/{}/{}.svg",
+            owner, repo
+        ),
+        Some(format!("https://github.com/{}/{}/watchers", owner, repo)),
+    )
+}
+
+pub fn badge_for_github_sponsors(owner: &str) -> Badge {
+    optional_badge(
+        BadgeKind::Sponsors,
+        "GitHub sponsors",
+        format!("https://img.shields.io/github/sponsors/{}.svg", owner),
+        Some(format!("https://github.com/sponsors/{}", owner)),
+    )
+}
+
+pub fn badge_for_tokei_loc(owner: &str, repo: &str) -> Badge {
+    optional_badge(
+        BadgeKind::Loc,
+        "lines of code",
+        format!(
+            "https://img.shields.io/tokei/lines/github/{}/{}.svg",
+            owner, repo
+        ),
+        Some(format!("https://github.com/{}/{}", owner, repo)),
+    )
+}
+
+pub fn badge_for_openssf_scorecard(owner: &str, repo: &str) -> Badge {
+    optional_badge(
+        BadgeKind::Scorecard,
+        "OpenSSF scorecard",
+        format!(
+            "https://api.securityscorecards.dev/projects/github.com/{}/{}/badge",
+            owner, repo
+        ),
+        Some(format!(
+            "https://scorecard.dev/viewer/?uri=github.com/{}/{}",
+            owner, repo
+        )),
+    )
+}
+
+pub fn badge_for_deps_rs(owner: &str, repo: &str) -> Badge {
+    optional_badge(
+        BadgeKind::Deps,
+        "dependency status",
+        format!("https://deps.rs/repo/github/{}/{}/status.svg", owner, repo),
+        Some(format!("https://deps.rs/repo/github/{}/{}", owner, repo)),
+    )
+}
+
 pub fn badge_for_codecov(owner: &str, repo: &str) -> Badge {
     badge(
         BadgeKind::Coverage,
@@ -327,11 +434,13 @@ fn is_dual_license_expression(license: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        badge_for_codecov, badge_for_crates_downloads, badge_for_crates_msrv, badge_for_docs_rs,
-        badge_for_docs_url, badge_for_github_downloads, badge_for_github_forks,
+        badge_for_codecov, badge_for_crates_downloads, badge_for_crates_msrv, badge_for_deps_rs,
+        badge_for_docs_rs, badge_for_docs_url, badge_for_github_downloads, badge_for_github_forks,
         badge_for_github_issues, badge_for_github_last_commit, badge_for_github_pull_requests,
-        badge_for_github_release, badge_for_github_stars, badge_for_license_text,
-        badge_for_npm_downloads, encode_static_badge_segment,
+        badge_for_github_release, badge_for_github_sponsors, badge_for_github_stars,
+        badge_for_github_watchers, badge_for_license_text, badge_for_npm_downloads,
+        badge_for_npm_types, badge_for_openssf_scorecard, badge_for_pypi, badge_for_pypi_downloads,
+        badge_for_pypi_pyversions, badge_for_tokei_loc, encode_static_badge_segment,
     };
 
     #[test]
@@ -383,6 +492,34 @@ mod tests {
             badge_for_codecov("f4ah6o", "bdg-rs").render_markdown(),
             "[![codecov](https://img.shields.io/codecov/c/github/f4ah6o/bdg-rs.svg)](https://codecov.io/gh/f4ah6o/bdg-rs)"
         );
+        assert_eq!(
+            badge_for_pypi("requests").render_markdown(),
+            "[![pypi](https://img.shields.io/pypi/v/requests.svg)](https://pypi.org/project/requests)"
+        );
+        assert_eq!(
+            badge_for_pypi_downloads("requests").render_markdown(),
+            "[![pypi downloads](https://img.shields.io/pypi/dm/requests.svg)](https://pypistats.org/packages/requests)"
+        );
+        assert_eq!(
+            badge_for_github_watchers("f4ah6o", "bdg-rs").render_markdown(),
+            "[![GitHub watchers](https://img.shields.io/github/watchers/f4ah6o/bdg-rs.svg)](https://github.com/f4ah6o/bdg-rs/watchers)"
+        );
+        assert_eq!(
+            badge_for_github_sponsors("f4ah6o").render_markdown(),
+            "[![GitHub sponsors](https://img.shields.io/github/sponsors/f4ah6o.svg)](https://github.com/sponsors/f4ah6o)"
+        );
+        assert_eq!(
+            badge_for_tokei_loc("f4ah6o", "bdg-rs").render_markdown(),
+            "[![lines of code](https://img.shields.io/tokei/lines/github/f4ah6o/bdg-rs.svg)](https://github.com/f4ah6o/bdg-rs)"
+        );
+        assert_eq!(
+            badge_for_openssf_scorecard("f4ah6o", "bdg-rs").render_markdown(),
+            "[![OpenSSF scorecard](https://api.securityscorecards.dev/projects/github.com/f4ah6o/bdg-rs/badge)](https://scorecard.dev/viewer/?uri=github.com/f4ah6o/bdg-rs)"
+        );
+        assert_eq!(
+            badge_for_deps_rs("f4ah6o", "bdg-rs").render_markdown(),
+            "[![dependency status](https://deps.rs/repo/github/f4ah6o/bdg-rs/status.svg)](https://deps.rs/repo/github/f4ah6o/bdg-rs)"
+        );
     }
 
     #[test]
@@ -395,6 +532,13 @@ mod tests {
             badge_for_github_issues("f4ah6o", "bdg-rs"),
             badge_for_github_pull_requests("f4ah6o", "bdg-rs"),
             badge_for_github_last_commit("f4ah6o", "bdg-rs"),
+            badge_for_github_watchers("f4ah6o", "bdg-rs"),
+            badge_for_github_sponsors("f4ah6o"),
+            badge_for_tokei_loc("f4ah6o", "bdg-rs"),
+            badge_for_openssf_scorecard("f4ah6o", "bdg-rs"),
+            badge_for_deps_rs("f4ah6o", "bdg-rs"),
+            badge_for_npm_types("bdg-cli"),
+            badge_for_pypi_pyversions("requests"),
         ];
 
         assert!(badges.iter().all(|badge| !badge.sync_default));
