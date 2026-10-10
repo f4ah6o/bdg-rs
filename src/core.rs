@@ -1,4 +1,4 @@
-use crate::manifest::cargo_manifest_has_package;
+use crate::manifest::{cargo_manifest_has_package, pyproject_manifest_has_project};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6,6 +6,7 @@ pub enum Ecosystem {
     Node,
     MoonBit,
     Rust,
+    Python,
 }
 
 #[derive(Debug, Clone)]
@@ -13,9 +14,11 @@ pub struct ManifestPaths {
     pub package_json: Option<PathBuf>,
     pub moon_mod: Option<PathBuf>,
     pub cargo_toml: Option<PathBuf>,
+    pub pyproject_toml: Option<PathBuf>,
     pub package_json_all: Vec<PathBuf>,
     pub moon_mod_all: Vec<PathBuf>,
     pub cargo_toml_all: Vec<PathBuf>,
+    pub pyproject_toml_all: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,15 +51,18 @@ pub fn detect_manifests(
         package_json: None,
         moon_mod: None,
         cargo_toml: None,
+        pyproject_toml: None,
         package_json_all: Vec::new(),
         moon_mod_all: Vec::new(),
         cargo_toml_all: Vec::new(),
+        pyproject_toml_all: Vec::new(),
     };
 
     let candidates = [
         root.join("package.json"),
         root.join("moon.mod.json"),
         root.join("Cargo.toml"),
+        root.join("pyproject.toml"),
     ];
 
     for candidate in candidates {
@@ -65,6 +71,7 @@ pub fn detect_manifests(
                 Some("package.json") => manifests.package_json_all.push(candidate),
                 Some("moon.mod.json") => manifests.moon_mod_all.push(candidate),
                 Some("Cargo.toml") => manifests.cargo_toml_all.push(candidate),
+                Some("pyproject.toml") => manifests.pyproject_toml_all.push(candidate),
                 _ => {}
             }
         }
@@ -84,6 +91,9 @@ pub fn detect_manifests(
             "package.json" => manifests.package_json_all.push(entry.path().to_path_buf()),
             "moon.mod.json" => manifests.moon_mod_all.push(entry.path().to_path_buf()),
             "Cargo.toml" => manifests.cargo_toml_all.push(entry.path().to_path_buf()),
+            "pyproject.toml" => manifests
+                .pyproject_toml_all
+                .push(entry.path().to_path_buf()),
             _ => {}
         }
     }
@@ -91,6 +101,8 @@ pub fn detect_manifests(
     manifests.package_json = choose_closest(current_dir, &manifests.package_json_all);
     manifests.moon_mod = choose_closest(current_dir, &manifests.moon_mod_all);
     manifests.cargo_toml = choose_cargo_manifest(current_dir, &manifests.cargo_toml_all);
+    manifests.pyproject_toml =
+        choose_pyproject_manifest(current_dir, &manifests.pyproject_toml_all);
 
     Ok(manifests)
 }
@@ -104,6 +116,9 @@ pub fn detect_ecosystem(manifests: &ManifestPaths) -> Option<Ecosystem> {
     }
     if manifests.cargo_toml.is_some() {
         return Some(Ecosystem::Rust);
+    }
+    if manifests.pyproject_toml.is_some() {
+        return Some(Ecosystem::Python);
     }
     None
 }
@@ -225,7 +240,7 @@ fn is_ignored(entry: &walkdir::DirEntry, root: &Path) -> bool {
     };
     if matches!(
         first.as_ref(),
-        ".git" | "target" | "node_modules" | "dist" | "build" | "out" | "vendor"
+        ".git" | "target" | "node_modules" | "dist" | "build" | "out" | "vendor" | ".venv"
     ) {
         return true;
     }
@@ -266,6 +281,19 @@ fn choose_cargo_manifest(current_dir: &Path, paths: &[PathBuf]) -> Option<PathBu
         .cloned()
         .collect::<Vec<_>>();
     choose_closest(current_dir, &package_manifests)
+}
+
+fn choose_pyproject_manifest(current_dir: &Path, paths: &[PathBuf]) -> Option<PathBuf> {
+    let closest = choose_closest(current_dir, paths)?;
+    if pyproject_manifest_has_project(&closest) {
+        return Some(closest);
+    }
+    let project_manifests = paths
+        .iter()
+        .filter(|path| pyproject_manifest_has_project(path))
+        .cloned()
+        .collect::<Vec<_>>();
+    choose_closest(current_dir, &project_manifests)
 }
 
 fn path_distance(from: &Path, to_file: &Path) -> usize {

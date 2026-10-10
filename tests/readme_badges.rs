@@ -206,3 +206,90 @@ fn id_is_stable() {
     let second = parse_badge_line(line).id;
     assert_eq!(first, second);
 }
+
+#[test]
+fn parses_pypi_badge_kinds() {
+    let line = "![pypi](https://img.shields.io/pypi/v/requests.svg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "pypi_version");
+    assert_eq!(badge.id, "pypi:requests");
+    assert_eq!(
+        badge.meta.unwrap(),
+        serde_json::json!({ "package": "requests" })
+    );
+
+    for image in [
+        "https://img.shields.io/pypi/dm/requests.svg",
+        "https://img.shields.io/pypi/dt/requests.svg",
+        "https://img.shields.io/pypi/dw/requests.svg",
+    ] {
+        let line = format!("![dl]({image})");
+        let badge = parse_badge_line(&line);
+        assert_eq!(badge.kind, "pypi_downloads", "{image}");
+        assert_eq!(badge.id, "pypi_downloads:requests");
+    }
+
+    let line = "![pyversions](https://img.shields.io/pypi/pyversions/requests.svg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "pypi_pyversions");
+    assert_eq!(badge.id, "pypi_pyversions:requests");
+
+    let line = "![license](https://img.shields.io/pypi/l/requests.svg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "license");
+    assert_eq!(badge.id, "license:pypi");
+}
+
+#[test]
+fn parses_npm_types_kind() {
+    let line = "![types](https://img.shields.io/npm/types/react.svg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "npm_types");
+    assert_eq!(badge.id, "npm_types:react");
+}
+
+#[test]
+fn parses_github_repository_signal_kinds() {
+    let cases = [
+        (
+            "![watchers](https://img.shields.io/github/watchers/OWNER/REPO.svg)",
+            "github_watchers",
+            "watchers:github",
+        ),
+        (
+            "![loc](https://img.shields.io/tokei/lines/github/OWNER/REPO.svg)",
+            "tokei_loc",
+            "loc:github",
+        ),
+        (
+            "![deps](https://deps.rs/repo/github/OWNER/REPO/status.svg)",
+            "deps_rs",
+            "deps:github",
+        ),
+        (
+            "![scorecard](https://api.securityscorecards.dev/projects/github.com/OWNER/REPO/badge)",
+            "openssf_scorecard",
+            "scorecard:github",
+        ),
+    ];
+
+    for (line, kind, id) in cases {
+        let badge = parse_badge_line(line);
+        assert_eq!(badge.kind, kind, "{line}");
+        assert_eq!(badge.id, id, "{line}");
+        assert_eq!(
+            badge.meta.unwrap(),
+            serde_json::json!({ "owner": "OWNER", "repo": "REPO" }),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn parses_github_sponsors_kind() {
+    let line = "![sponsors](https://img.shields.io/github/sponsors/OWNER.svg)";
+    let badge = parse_badge_line(line);
+    assert_eq!(badge.kind, "github_sponsors");
+    assert_eq!(badge.id, "sponsors:OWNER");
+    assert_eq!(badge.meta.unwrap(), serde_json::json!({ "owner": "OWNER" }));
+}

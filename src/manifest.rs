@@ -26,6 +26,44 @@ pub struct MoonMod {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PyProject {
+    pub project: Option<PyProjectProject>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PyProjectProject {
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub license: Option<PyProjectLicense>,
+    #[serde(rename = "requires-python")]
+    pub requires_python: Option<String>,
+    #[serde(default)]
+    pub urls: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PyProjectLicense {
+    Text(String),
+    Table {
+        text: Option<String>,
+        file: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ResolvedPyProject {
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub license: Option<String>,
+    pub repository: Option<String>,
+    pub homepage: Option<String>,
+    pub requires_python: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CargoToml {
     pub package: Option<CargoPackage>,
     pub workspace: Option<CargoWorkspace>,
@@ -92,6 +130,53 @@ pub fn read_moon_mod(path: &Path) -> anyhow::Result<MoonMod> {
     let content = std::fs::read_to_string(path)?;
     let module: MoonMod = serde_json::from_str(&content)?;
     Ok(module)
+}
+
+pub fn read_pyproject(path: &Path) -> anyhow::Result<PyProject> {
+    let content = std::fs::read_to_string(path)?;
+    let manifest: PyProject = toml::from_str(&content)?;
+    Ok(manifest)
+}
+
+pub fn pyproject_manifest_has_project(path: &Path) -> bool {
+    read_pyproject(path)
+        .map(|manifest| manifest.project.is_some())
+        .unwrap_or(false)
+}
+
+pub fn read_resolved_pyproject(path: &Path) -> anyhow::Result<Option<ResolvedPyProject>> {
+    let manifest = read_pyproject(path)?;
+    let Some(project) = manifest.project else {
+        return Ok(None);
+    };
+    let license = project.license.and_then(|license| match license {
+        PyProjectLicense::Text(value) => Some(value),
+        PyProjectLicense::Table { text, .. } => text,
+    });
+    let repository = project
+        .urls
+        .iter()
+        .find(|(key, _)| {
+            matches!(
+                key.to_lowercase().as_str(),
+                "repository" | "source" | "code" | "github"
+            )
+        })
+        .map(|(_, url)| url.clone());
+    let homepage = project
+        .urls
+        .iter()
+        .find(|(key, _)| matches!(key.to_lowercase().as_str(), "homepage" | "home"))
+        .map(|(_, url)| url.clone());
+    Ok(Some(ResolvedPyProject {
+        name: project.name,
+        version: project.version,
+        description: project.description,
+        license,
+        repository,
+        homepage,
+        requires_python: project.requires_python,
+    }))
 }
 
 pub fn read_cargo_toml(path: &Path) -> anyhow::Result<CargoToml> {

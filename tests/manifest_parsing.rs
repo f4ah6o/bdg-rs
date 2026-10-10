@@ -1,6 +1,7 @@
 use bdg::core::detect_manifests;
 use bdg::manifest::{
-    RepositoryField, read_cargo_toml, read_moon_mod, read_package_json, read_resolved_cargo_package,
+    RepositoryField, pyproject_manifest_has_project, read_cargo_toml, read_moon_mod,
+    read_package_json, read_resolved_cargo_package, read_resolved_pyproject,
 };
 use std::fs;
 use std::path::Path;
@@ -89,6 +90,67 @@ fn ignores_fixtures_manifests() {
             .iter()
             .any(|path| path.to_string_lossy().contains("tests/fixtures"))
     );
+    assert!(
+        !manifests
+            .pyproject_toml_all
+            .iter()
+            .any(|path| path.to_string_lossy().contains("tests/fixtures"))
+    );
+}
+
+#[test]
+fn parses_pyproject_toml() {
+    let path = fixture("pyproject.toml");
+    let project = read_resolved_pyproject(&path)
+        .unwrap()
+        .expect("[project] missing");
+    assert_eq!(project.name.as_deref(), Some("py-fixture"));
+    assert_eq!(project.version.as_deref(), Some("1.4.0"));
+    assert_eq!(project.license.as_deref(), Some("Apache-2.0"));
+    assert_eq!(
+        project.repository.as_deref(),
+        Some("https://github.com/example/py-fixture")
+    );
+    assert_eq!(
+        project.homepage.as_deref(),
+        Some("https://py-fixture.example.com")
+    );
+    assert_eq!(project.requires_python.as_deref(), Some(">=3.9"));
+}
+
+#[test]
+fn pyproject_requires_project_table_for_detection() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::write(
+        temp.path().join("pyproject.toml"),
+        r#"
+[project]
+name = "has-project"
+version = "0.1.0"
+"#,
+    )
+    .unwrap();
+    fs::create_dir_all(temp.path().join("tooling")).unwrap();
+    fs::write(
+        temp.path().join("tooling/pyproject.toml"),
+        r#"
+[tool.black]
+line-length = 100
+"#,
+    )
+    .unwrap();
+
+    let manifests = detect_manifests(temp.path(), temp.path(), 3).unwrap();
+
+    let pyproject = manifests
+        .pyproject_toml
+        .as_ref()
+        .expect("pyproject.toml missing");
+    assert!(pyproject.ends_with("pyproject.toml"));
+    assert!(pyproject_manifest_has_project(pyproject));
+    assert!(!pyproject_manifest_has_project(
+        &temp.path().join("tooling/pyproject.toml")
+    ));
 }
 
 #[test]

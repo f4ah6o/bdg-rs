@@ -1,6 +1,6 @@
 ---
 name: bdg
-description: Use bdg to validate, synchronize, inspect, and remove README badges safely in Rust, Node, and MoonBit repositories.
+description: Use bdg to validate, synchronize, inspect, and remove README badges safely in Rust, Node, MoonBit, and Python repositories.
 ---
 
 # bdg
@@ -27,29 +27,38 @@ Use `bdg add` when a human should interactively choose a broader subset of built
 
 Canonical `sync` candidates include:
 
-- `version`: npm, crates.io, MoonBit
+- `version`: npm, crates.io, MoonBit, PyPI
 - `ci`: detected GitHub Actions workflows
 - `license`: manifest or GitHub license
 - `release`: GitHub release
 - `docs`: docs.rs or package documentation URL
-- `downloads`: npm or crates.io downloads
+- `downloads`: npm, crates.io, or PyPI downloads
 - `coverage`: detected Codecov usage
 
 Additional supported candidates are deliberately opt-in for `sync`:
 
 - `msrv`: crates.io MSRV
+- `types`: npm TypeScript types
+- `pyversions`: PyPI supported Python versions
 - `downloads`: total GitHub release downloads
 - `stars`: GitHub stars
 - `forks`: GitHub forks
+- `watchers`: GitHub watchers
+- `sponsors`: GitHub sponsors
 - `issues`: open GitHub issues
 - `pulls`: open GitHub pull requests
 - `activity`: GitHub last commit
+- `loc`: lines of code via tokei
+- `scorecard`: OpenSSF Scorecard
+- `deps`: deps.rs dependency status for Rust repositories
 
 An unqualified `bdg sync` does not introduce these optional repository/community badges. Use interactive `bdg add`, `bdg add --yes`, or an explicit `sync --only` when they are wanted.
 
 ```bash
 bdg sync --only msrv,stars,issues,activity
+bdg sync --only watchers,sponsors,loc,scorecard
 bdg add --only downloads,stars,forks,pulls
+bdg add --only types,deps,pyversions
 ```
 
 ## Commands
@@ -62,6 +71,7 @@ Non-interactively reconciles the managed block from detected project metadata.
 bdg sync
 bdg sync --only ci,version,license,release,docs,downloads,coverage
 bdg sync --only msrv,stars,forks,issues,pulls,activity
+bdg sync --only watchers,sponsors,loc,scorecard
 bdg sync --check
 bdg sync --dry-run
 bdg sync --json --check
@@ -69,7 +79,7 @@ bdg sync --json --check
 
 Behavior:
 
-- detects project metadata from `Cargo.toml`, `package.json`, or `moon.mod.json`
+- detects project metadata from `Cargo.toml`, `package.json`, `moon.mod.json`, or `pyproject.toml`
 - detects GitHub Actions workflows from `.github/workflows`
 - generates supported badge candidates from project and repository metadata
 - keeps optional repository/community signals out of default `sync`
@@ -107,6 +117,8 @@ bdg add
 bdg add --yes
 bdg add --only ci,version,license
 bdg add --only msrv,stars,forks,issues,pulls,activity
+bdg add --only watchers,sponsors,loc,scorecard,deps
+bdg add --only types,pyversions
 bdg add --dry-run
 bdg add --json --dry-run
 ```
@@ -126,7 +138,7 @@ bdg catalog add remote-status --source https://example.com/catalog.json --dry-ru
 bdg catalog add-url https://example.com/status.svg --label status --link https://example.com/status
 ```
 
-Catalog schema is `bdg.catalog/v1` in TOML or JSON. Badge templates may use `{owner}`, `{repo}`, `{crate}`, `{package}`, `{module}`, and `{name}`; repeated `--set KEY=VALUE` supplies additional values. `catalog add-url` adds a one-off HTTP(S) badge without a catalog. Arbitrary HTTP(S) badge images are recognized as managed external badges.
+Catalog schema is `bdg.catalog/v1` in TOML or JSON. Badge templates may use `{owner}`, `{repo}`, `{crate}`, `{package}`, `{module}`, `{pypi}`, and `{name}`; repeated `--set KEY=VALUE` supplies additional values. `catalog add-url` adds a one-off HTTP(S) badge without a catalog. Arbitrary HTTP(S) badge images are recognized as managed external badges.
 
 Persistent sources can be configured in `.bdg.toml`:
 
@@ -188,6 +200,7 @@ Config discovery starts from that requested directory and stops at its Git root.
 - Rust: `Cargo.toml`
 - Node: `package.json`
 - MoonBit: `moon.mod.json`
+- Python: `pyproject.toml` (with a `[project]` table; PyPI badges require the package to be published on PyPI)
 
 `bdg` chooses the closest matching manifest inside the repository and supports workspace/monorepo discovery.
 

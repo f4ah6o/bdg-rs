@@ -1,6 +1,8 @@
 use crate::config::load_config;
 use crate::core::build_context;
-use crate::manifest::{read_moon_mod, read_package_json, read_resolved_cargo_package};
+use crate::manifest::{
+    read_moon_mod, read_package_json, read_resolved_cargo_package, read_resolved_pyproject,
+};
 use crate::plan::ReadmePlan;
 use crate::readme::{
     ensure_marker_block, extract_managed_block, resolve_readme, rewrite_marker_block,
@@ -421,6 +423,13 @@ fn project_values(current_dir: &Path) -> anyhow::Result<BTreeMap<String, String>
         && let Some(name) = module.name
     {
         values.insert("module".to_string(), name.clone());
+        values.entry("name".to_string()).or_insert(name);
+    }
+    if let Some(path) = &context.manifests.pyproject_toml
+        && let Ok(Some(project)) = read_resolved_pyproject(path)
+        && let Some(name) = project.name
+    {
+        values.insert("pypi".to_string(), name.clone());
         values.entry("name".to_string()).or_insert(name);
     }
     Ok(values)

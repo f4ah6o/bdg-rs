@@ -1,10 +1,12 @@
 use crate::config::Config;
 use crate::core::ProjectContext;
-use crate::manifest::{read_moon_mod, read_package_json, read_resolved_cargo_package};
+use crate::manifest::{
+    read_moon_mod, read_package_json, read_resolved_cargo_package, read_resolved_pyproject,
+};
 use crate::project::{
     NpmPackage, local_npm_packages, repository_to_string, select_representative_npm_package,
 };
-use crate::providers::{RegistryMetadata, fetch_crates_metadata};
+use crate::providers::{RegistryMetadata, fetch_crates_metadata, fetch_pypi_metadata};
 use crate::readme::readme_newline_info;
 use crate::readme_badges::ParsedBadge;
 use crate::version::VersionOptions;
@@ -321,6 +323,30 @@ fn collect_manifests(
             }),
         );
     }
+    if let Some(path) = &context.manifests.pyproject_toml
+        && let Some(project) = read_resolved_pyproject(path)?
+    {
+        let version_info = project
+            .version
+            .as_deref()
+            .map(|v| crate::version::classify_version(v, options));
+        manifests.insert(
+            "python".to_string(),
+            serde_json::json!({
+                "path": path.to_string_lossy(),
+                "name": project.name,
+                "version": project.version,
+                "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
+                "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
+                "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
+                "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
+                "license": project.license,
+                "repository": project.repository,
+                "homepage": project.homepage,
+                "requires_python": project.requires_python,
+            }),
+        );
+    }
     Ok(manifests)
 }
 
@@ -446,6 +472,44 @@ fn collect_registries(
                 "reason": "disabled",
             }),
         );
+    }
+    if let Some(path) = &context.manifests.pyproject_toml
+        && let Some(project) = read_resolved_pyproject(path)?
+        && let Some(name) = project.name.as_deref()
+    {
+        match fetch_pypi_metadata(name) {
+            Ok(meta) => {
+                let version_info = meta
+                    .version
+                    .as_deref()
+                    .map(|v| crate::version::classify_version(v, options));
+                registries.insert(
+                    "pypi".to_string(),
+                    serde_json::json!({
+                        "ok": true,
+                        "package": name,
+                        "latest": meta.version,
+                        "version_format": version_info.as_ref().map(|v| v.version_format.clone()),
+                        "calver_scheme": version_info.as_ref().and_then(|v| v.calver_scheme.clone()),
+                        "calver_parts": version_info.as_ref().and_then(|v| v.calver_parts.clone()),
+                        "modifier": version_info.as_ref().and_then(|v| v.modifier.clone()),
+                        "license": meta.license,
+                        "repository": meta.repository,
+                        "homepage": meta.homepage,
+                    }),
+                );
+            }
+            Err(_) => {
+                registries.insert(
+                    "pypi".to_string(),
+                    serde_json::json!({
+                        "ok": false,
+                        "package": name,
+                        "reason": "network",
+                    }),
+                );
+            }
+        }
     }
     Ok(registries)
 }

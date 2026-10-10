@@ -11,8 +11,8 @@ It treats badges as managed project metadata rather than ad-hoc Markdown: projec
 
 ## Highlights
 
-- Rust, Node, and MoonBit project detection
-- crates.io and npm registry metadata
+- Rust, Node, MoonBit, and Python project detection
+- crates.io, npm, and PyPI registry metadata
 - GitHub Actions workflow discovery
 - version, CI, license, release, docs, downloads, coverage, MSRV, and GitHub repository badges
 - deterministic non-interactive `sync` for local automation and CI
@@ -74,29 +74,38 @@ bdg check --json
 
 Canonical candidates can include:
 
-- `version`: npm, crates.io, MoonBit
+- `version`: npm, crates.io, MoonBit, PyPI
 - `ci`: detected GitHub Actions workflows
 - `license`: manifest license or GitHub repository license
 - `release`: latest GitHub release
 - `docs`: docs.rs or detected package documentation URL
-- `downloads`: npm or crates.io downloads
+- `downloads`: npm, crates.io, or PyPI downloads
 - `coverage`: Codecov when configuration or workflow usage is detected
 
 Additional supported candidates include:
 
 - `msrv`: crates.io MSRV
+- `types`: npm TypeScript types
+- `pyversions`: PyPI supported Python versions
 - `downloads`: total GitHub release downloads
 - `stars`: GitHub stars
 - `forks`: GitHub forks
+- `watchers`: GitHub watchers
+- `sponsors`: GitHub sponsors
 - `issues`: open GitHub issues
 - `pulls`: open GitHub pull requests
 - `activity`: GitHub last commit
+- `loc`: lines of code via tokei
+- `scorecard`: OpenSSF Scorecard
+- `deps`: deps.rs dependency status for Rust repositories
 
 These additional repository/community badges are available in interactive `bdg add`, in `bdg add --yes`, and through an explicit `sync --only`. They are intentionally not introduced by an unqualified `bdg sync`.
 
 ```bash
 bdg sync --only msrv,stars,issues,activity
+bdg sync --only watchers,sponsors,loc,scorecard
 bdg add --only downloads,stars,forks,pulls
+bdg add --only types,deps,pyversions
 ```
 
 ## Commands
@@ -154,7 +163,7 @@ bdg catalog add remote-status --source https://example.com/bdg-catalog.json
 bdg catalog add-url https://example.com/status.svg --label status --link https://example.com/status
 ```
 
-Catalog sources may be TOML or JSON using schema `bdg.catalog/v1`. Definitions are templates and can use project placeholders: `{owner}`, `{repo}`, `{crate}`, `{package}`, `{module}`, and `{name}`. Missing values can be supplied explicitly with repeated `--set KEY=VALUE`.
+Catalog sources may be TOML or JSON using schema `bdg.catalog/v1`. Definitions are templates and can use project placeholders: `{owner}`, `{repo}`, `{crate}`, `{package}`, `{module}`, `{pypi}`, and `{name}`. Missing values can be supplied explicitly with repeated `--set KEY=VALUE`.
 
 ```toml
 schema = "bdg.catalog/v1"

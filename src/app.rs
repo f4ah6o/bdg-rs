@@ -1,16 +1,20 @@
 use crate::badges::{
     Badge, badge_for_codecov, badge_for_crates, badge_for_crates_downloads, badge_for_crates_msrv,
-    badge_for_docs_rs, badge_for_docs_url, badge_for_github_downloads, badge_for_github_forks,
-    badge_for_github_issues, badge_for_github_last_commit, badge_for_github_pull_requests,
-    badge_for_github_release, badge_for_github_stars, badge_for_license, badge_for_license_text,
-    badge_for_moonbit, badge_for_npm, badge_for_npm_downloads, badge_for_workflow, dedupe_badges,
+    badge_for_deps_rs, badge_for_docs_rs, badge_for_docs_url, badge_for_github_downloads,
+    badge_for_github_forks, badge_for_github_issues, badge_for_github_last_commit,
+    badge_for_github_pull_requests, badge_for_github_release, badge_for_github_sponsors,
+    badge_for_github_stars, badge_for_github_watchers, badge_for_license, badge_for_license_text,
+    badge_for_moonbit, badge_for_npm, badge_for_npm_downloads, badge_for_npm_types,
+    badge_for_openssf_scorecard, badge_for_pypi, badge_for_pypi_downloads,
+    badge_for_pypi_pyversions, badge_for_tokei_loc, badge_for_workflow, dedupe_badges,
 };
 use crate::config::{Config, load_config};
-use crate::core::{ProjectContext, build_context};
+use crate::core::{Ecosystem, ProjectContext, build_context};
 use crate::inspect::build_list_json;
-use crate::manifest::{read_moon_mod, read_resolved_cargo_package};
+use crate::manifest::{read_moon_mod, read_resolved_cargo_package, read_resolved_pyproject};
 use crate::plan::ReadmePlan;
 use crate::project::{infer_owner_repo, local_npm_packages, resolve_metadata};
+use crate::providers::{RegistryMetadata, fetch_pypi_metadata};
 use crate::readme::{
     ensure_marker_block, extract_managed_block, readme_newline_info, remove_marker_block,
     resolve_readme, rewrite_marker_block, rewrite_marker_block_lines,
@@ -90,6 +94,7 @@ fn cmd_add_inner(
     for package in npm_packages.iter().filter(|package| package.published) {
         candidates.push(badge_for_npm(&package.name));
         candidates.push(badge_for_npm_downloads(&package.name));
+        candidates.push(badge_for_npm_types(&package.name));
         if let Some(homepage) = package
             .registry
             .homepage
@@ -121,6 +126,32 @@ fn cmd_add_inner(
             )));
         }
     }
+    if let Some(path) = &context.manifests.pyproject_toml
+        && let Ok(Some(project)) = read_resolved_pyproject(path)
+        && let Some(name) = project.name.as_deref()
+    {
+        let registry = if context.ecosystem == Some(Ecosystem::Python) {
+            metadata
+                .registry
+                .clone()
+                .unwrap_or_else(RegistryMetadata::empty)
+        } else {
+            fetch_pypi_metadata(name).unwrap_or_else(|_| RegistryMetadata::empty())
+        };
+        if registry.version.is_some() {
+            candidates.push(badge_for_pypi(name));
+            candidates.push(badge_for_pypi_downloads(name));
+            candidates.push(badge_for_pypi_pyversions(name));
+            if let Some(homepage) = registry
+                .homepage
+                .as_deref()
+                .map(str::trim)
+                .filter(|homepage| !homepage.is_empty())
+            {
+                candidates.push(badge_for_docs_url(homepage));
+            }
+        }
+    }
     if let Some(license) = metadata
         .license
         .as_deref()
@@ -142,6 +173,13 @@ fn cmd_add_inner(
         candidates.push(badge_for_github_issues(owner, repo));
         candidates.push(badge_for_github_pull_requests(owner, repo));
         candidates.push(badge_for_github_last_commit(owner, repo));
+        candidates.push(badge_for_github_watchers(owner, repo));
+        candidates.push(badge_for_github_sponsors(owner));
+        candidates.push(badge_for_tokei_loc(owner, repo));
+        candidates.push(badge_for_openssf_scorecard(owner, repo));
+        if context.manifests.cargo_toml.is_some() {
+            candidates.push(badge_for_deps_rs(owner, repo));
+        }
         if detects_codecov(&context.root) {
             candidates.push(badge_for_codecov(owner, repo));
         }
@@ -452,6 +490,13 @@ fn format_badge_label(badge: &Badge, context: &ProjectContext, options: &Version
         crate::badges::BadgeKind::Issues => "GitHub issues".to_string(),
         crate::badges::BadgeKind::PullRequests => "GitHub pull requests".to_string(),
         crate::badges::BadgeKind::Activity => "GitHub last commit".to_string(),
+        crate::badges::BadgeKind::Watchers => "GitHub watchers".to_string(),
+        crate::badges::BadgeKind::Sponsors => "GitHub sponsors".to_string(),
+        crate::badges::BadgeKind::Loc => "lines of code".to_string(),
+        crate::badges::BadgeKind::Scorecard => "OpenSSF scorecard".to_string(),
+        crate::badges::BadgeKind::Deps => "dependency status".to_string(),
+        crate::badges::BadgeKind::Types => "npm types".to_string(),
+        crate::badges::BadgeKind::Pyversions => "Python versions".to_string(),
     }
 }
 
@@ -461,6 +506,10 @@ fn extract_version_from_badge(badge: &Badge) -> Option<String> {
         return Some(segment.trim_end_matches(".svg").to_string());
     }
     if let Some(url) = badge.image_url.split("img.shields.io/crates/v/").nth(1) {
+        let segment = url.split(&['/', '?'][..]).next().unwrap_or("");
+        return Some(segment.trim_end_matches(".svg").to_string());
+    }
+    if let Some(url) = badge.image_url.split("img.shields.io/pypi/v/").nth(1) {
         let segment = url.split(&['/', '?'][..]).next().unwrap_or("");
         return Some(segment.trim_end_matches(".svg").to_string());
     }
@@ -502,6 +551,7 @@ fn recommended_indices(badges: &[Badge]) -> Vec<usize> {
         if badge.kind == crate::badges::BadgeKind::Version
             && (badge.label.contains("crates")
                 || badge.label.contains("npm")
+                || badge.label.contains("pypi")
                 || badge.label.contains("moonbit"))
         {
             selected.push(idx);

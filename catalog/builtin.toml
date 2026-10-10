@@ -51,6 +51,66 @@ tags = ["github", "language"]
 description = "Most-used repository language"
 
 [[badge]]
+id = "github-language-count"
+kind = "language"
+label = "GitHub language count"
+image = "https://img.shields.io/github/languages/count/{owner}/{repo}.svg"
+link = "https://github.com/{owner}/{repo}"
+requires = ["owner", "repo"]
+tags = ["github", "language"]
+description = "Number of detected repository languages"
+
+[[badge]]
+id = "github-code-size"
+kind = "size"
+label = "GitHub code size"
+image = "https://img.shields.io/github/languages/code-size/{owner}/{repo}.svg"
+link = "https://github.com/{owner}/{repo}"
+requires = ["owner", "repo"]
+tags = ["github", "size", "code"]
+description = "Code size of the repository"
+
+[[badge]]
+id = "github-go-mod-version"
+kind = "version"
+label = "Go version"
+image = "https://img.shields.io/github/go-mod/go-version/{owner}/{repo}.svg"
+link = "https://github.com/{owner}/{repo}"
+requires = ["owner", "repo"]
+tags = ["go", "github", "version"]
+description = "Go directive version from go.mod"
+
+[[badge]]
+id = "codefactor"
+kind = "quality"
+label = "CodeFactor"
+image = "https://img.shields.io/codefactor/grade/github/{owner}/{repo}.svg"
+link = "https://www.codefactor.io/repository/github/{owner}/{repo}"
+requires = ["owner", "repo"]
+tags = ["quality", "codefactor", "grade"]
+description = "CodeFactor code quality grade"
+
+[[badge]]
+id = "circleci"
+kind = "ci"
+label = "CircleCI"
+image = "https://img.shields.io/circleci/build/github/{owner}/{repo}.svg"
+link = "https://app.circleci.com/pipelines/github/{owner}/{repo}"
+requires = ["owner", "repo"]
+tags = ["ci", "circleci", "build"]
+description = "CircleCI build status"
+
+[[badge]]
+id = "coveralls"
+kind = "coverage"
+label = "Coveralls"
+image = "https://img.shields.io/coverallsCoverage/github/{owner}/{repo}.svg"
+link = "https://coveralls.io/github/{owner}/{repo}"
+requires = ["owner", "repo"]
+tags = ["coverage", "coveralls"]
+description = "Coveralls test coverage"
+
+[[badge]]
 id = "crates-dependents"
 kind = "dependents"
 label = "crates.io dependents"
@@ -59,6 +119,16 @@ link = "https://crates.io/crates/{crate}/reverse_dependencies"
 requires = ["crate"]
 tags = ["rust", "crates.io", "dependents"]
 description = "Dependent crates count"
+
+[[badge]]
+id = "crates-recent-downloads"
+kind = "downloads"
+label = "crates.io recent downloads"
+image = "https://img.shields.io/crates/dr/{crate}.svg"
+link = "https://crates.io/crates/{crate}"
+requires = ["crate"]
+tags = ["rust", "crates.io", "downloads"]
+description = "Recent crates.io downloads"
 
 [[badge]]
 id = "npm-license"
@@ -79,3 +149,72 @@ link = "https://www.npmjs.com/package/{package}"
 requires = ["package"]
 tags = ["node", "npm", "size"]
 description = "npm unpacked package size"
+
+[[badge]]
+id = "pypi-wheel"
+kind = "packaging"
+label = "PyPI wheel"
+image = "https://img.shields.io/pypi/wheel/{pypi}.svg"
+link = "https://pypi.org/project/{pypi}/"
+requires = ["pypi"]
+tags = ["python", "pypi", "wheel"]
+description = "PyPI wheel availability"
+
+[[badge]]
+id = "pypi-format"
+kind = "packaging"
+label = "PyPI format"
+image = "https://img.shields.io/pypi/format/{pypi}.svg"
+link = "https://pypi.org/project/{pypi}/"
+requires = ["pypi"]
+tags = ["python", "pypi", "format"]
+description = "PyPI distribution format"
+
+[[badge]]
+id = "docker-pulls"
+kind = "downloads"
+label = "Docker pulls"
+image = "https://img.shields.io/docker/pulls/{image}.svg"
+link = "https://hub.docker.com/r/{image}"
+requires = ["image"]
+tags = ["docker", "downloads"]
+description = "Docker Hub pull count"
+
+[[badge]]
+id = "docker-image-size"
+kind = "size"
+label = "Docker image size"
+image = "https://img.shields.io/docker/image-size/{image}.svg"
+link = "https://hub.docker.com/r/{image}"
+requires = ["image"]
+tags = ["docker", "size"]
+description = "Docker image compressed size"
+
+[[badge]]
+id = "discord"
+kind = "social"
+label = "Discord"
+image = "https://img.shields.io/discord/{server}.svg"
+requires = ["server"]
+tags = ["discord", "chat", "community", "social"]
+description = "Discord server online member count"
+
+[[badge]]
+id = "openssf-best-practices"
+kind = "security"
+label = "OpenSSF best practices"
+image = "https://img.shields.io/cii/summary/{id}.svg"
+link = "https://www.bestpractices.dev/projects/{id}"
+requires = ["id"]
+tags = ["openssf", "security", "cii", "best-practices"]
+description = "OpenSSF/CII best practices level"
+
+[[badge]]
+id = "vscode-marketplace"
+kind = "version"
+label = "VS Code Marketplace"
+image = "https://img.shields.io/visual-studio-marketplace/v/{id}.svg"
+link = "https://marketplace.visualstudio.com/items?itemName={id}"
+requires = ["id"]
+tags = ["vscode", "marketplace", "version"]
+description = "VS Code Marketplace extension version"
